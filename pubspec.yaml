@@ -41,6 +41,7 @@ dependencies:
   simple_heatmap_calendar: ^0.0.3
   font_awesome_flutter: ^10.7.0
   fl_chart: ^1.1.1
+  animate_do: ^3.3.4
 
 dev_dependencies:
   flutter_test:
