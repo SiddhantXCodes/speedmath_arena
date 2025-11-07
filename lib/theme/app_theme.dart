@@ -20,7 +20,7 @@ class AppTheme {
   static const Color darkBackground = Color(0xFF121212);
 
   // Core brand color (used for highlights and consistency)
-  static const Color primaryColor = Colors.deepPurple;
+  static const Color primaryColor = Colors.blueAccent;
 
   // -------------------------------
   // LIGHT THEME
