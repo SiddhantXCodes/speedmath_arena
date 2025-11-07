@@ -3,6 +3,7 @@ import '../screens/number_of_questions_selector_popup.dart';
 import '../screens/quiz/quiz_screen.dart';
 import '../screens/daily_ranked_quiz_screen.dart';
 import '../screens/leaderboard_screen.dart';
+import '../theme/app_theme.dart';
 
 class FeaturesSection extends StatelessWidget {
   final bool isDarkMode;
@@ -11,40 +12,51 @@ class FeaturesSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textColor = isDarkMode ? Colors.white : Colors.black87;
-    final bgColor = isDarkMode ? Colors.grey[900] : Colors.grey[100];
-    final cardColor = isDarkMode ? Colors.grey[850]! : Colors.white;
+    // Theme-driven tokens (use these everywhere)
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textColor = AppTheme.adaptiveText(context);
+    final scaffoldBg = theme.scaffoldBackgroundColor;
+    final cardColor = AppTheme.adaptiveCard(context);
+    final accent = AppTheme.adaptiveAccent(context);
+    final divider = theme.dividerColor;
 
+    // Smart practice cards: keep semantic meanings but use theme tokens
     final smartPractice = [
       {
         'icon': Icons.emoji_events_rounded,
         'title': 'Daily Ranked Quiz',
         'subtitle': 'Compete globally in 5 min',
-        'color': Colors.amberAccent.withOpacity(0.25),
+        // gold-like highlight for leaderboard
+        'color': AppTheme.gold.withOpacity(0.18),
       },
       {
         'icon': Icons.loop_rounded,
         'title': 'Mixed Practice',
         'subtitle': 'Variety of random math sets',
-        'color': Colors.lightBlueAccent.withOpacity(0.25),
+        // use secondary color for variety card
+        'color': colorScheme.secondary.withOpacity(0.18),
       },
       {
         'icon': Icons.bar_chart_rounded,
         'title': 'Performance',
         'subtitle': 'Detailed progress insights',
-        'color': Colors.greenAccent.withOpacity(0.25),
+        // success token
+        'color': AppTheme.successColor.withOpacity(0.18),
       },
       {
         'icon': Icons.lightbulb_rounded,
         'title': 'Tips & Tricks',
         'subtitle': 'Speed math shortcuts',
-        'color': Colors.purpleAccent.withOpacity(0.25),
+        // use accent but slightly muted
+        'color': accent.withOpacity(0.14),
       },
       {
         'icon': Icons.local_fire_department_rounded,
         'title': 'Streak Challenge',
         'subtitle': 'Maintain daily practice',
-        'color': Colors.deepOrangeAccent.withOpacity(0.25),
+        // warning / energetic color
+        'color': AppTheme.warningColor.withOpacity(0.18),
       },
     ];
 
@@ -106,7 +118,7 @@ class FeaturesSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          _buildGrid(context, basics, bgColor),
+          _buildGrid(context, basics, scaffoldBg),
           const SizedBox(height: 20),
         ],
       ),
@@ -117,6 +129,13 @@ class FeaturesSection extends StatelessWidget {
   // ✅ Bottom sheet for number range & question count
   // -----------------------------------------------
   void _showPracticeDialog(BuildContext context, String topic) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textColor = AppTheme.adaptiveText(context);
+    final accent = AppTheme.adaptiveAccent(context);
+    final fill = colorScheme.surfaceVariant.withOpacity(0.06);
+    final outline = colorScheme.onSurface.withOpacity(0.12);
+
     final TextEditingController minCtrl = TextEditingController(text: '5');
     final TextEditingController maxCtrl = TextEditingController(text: '30');
     double questionCount = 10;
@@ -124,7 +143,7 @@ class FeaturesSection extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDarkMode ? Colors.grey[900] : Colors.white,
+      backgroundColor: AppTheme.adaptiveCard(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -146,7 +165,7 @@ class FeaturesSection extends StatelessWidget {
                     width: 40,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: Colors.grey[400],
+                      color: theme.dividerColor.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -157,47 +176,33 @@ class FeaturesSection extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: isDarkMode ? Colors.white : Colors.black87,
+                    color: textColor,
                   ),
                 ),
                 const SizedBox(height: 20),
 
                 // Range input fields
-                // 🔹 Range input fields (Dark/Light mode adaptive)
                 Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: minCtrl,
                         keyboardType: TextInputType.number,
-                        style: TextStyle(
-                          color: isDarkMode ? Colors.white : Colors.black87,
-                        ),
+                        style: TextStyle(color: textColor),
                         decoration: InputDecoration(
                           labelText: 'Min number',
                           labelStyle: TextStyle(
-                            color: isDarkMode ? Colors.white70 : Colors.black54,
+                            color: textColor.withOpacity(0.7),
                           ),
                           filled: true,
-                          fillColor: isDarkMode
-                              ? Colors.grey[850]
-                              : Colors.grey[200], // ✅ adaptive
+                          fillColor: fill,
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: isDarkMode
-                                  ? Colors.white24
-                                  : Colors.black26,
-                            ),
+                            borderSide: BorderSide(color: outline),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: isDarkMode
-                                  ? Colors.orangeAccent
-                                  : Colors.blueAccent,
-                              width: 1.5,
-                            ),
+                            borderSide: BorderSide(color: accent, width: 1.5),
                           ),
                         ),
                       ),
@@ -207,34 +212,21 @@ class FeaturesSection extends StatelessWidget {
                       child: TextField(
                         controller: maxCtrl,
                         keyboardType: TextInputType.number,
-                        style: TextStyle(
-                          color: isDarkMode ? Colors.white : Colors.black87,
-                        ),
+                        style: TextStyle(color: textColor),
                         decoration: InputDecoration(
                           labelText: 'Max number',
                           labelStyle: TextStyle(
-                            color: isDarkMode ? Colors.white70 : Colors.black54,
+                            color: textColor.withOpacity(0.7),
                           ),
                           filled: true,
-                          fillColor: isDarkMode
-                              ? Colors.grey[850]
-                              : Colors.grey[200], // ✅ adaptive
+                          fillColor: fill,
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: isDarkMode
-                                  ? Colors.white24
-                                  : Colors.black26,
-                            ),
+                            borderSide: BorderSide(color: outline),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: isDarkMode
-                                  ? Colors.orangeAccent
-                                  : Colors.blueAccent,
-                              width: 1.5,
-                            ),
+                            borderSide: BorderSide(color: accent, width: 1.5),
                           ),
                         ),
                       ),
@@ -249,7 +241,7 @@ class FeaturesSection extends StatelessWidget {
                   'Number of Questions: ${questionCount.toInt()}',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: isDarkMode ? Colors.white : Colors.black87,
+                    color: textColor,
                   ),
                 ),
                 Slider(
@@ -257,9 +249,7 @@ class FeaturesSection extends StatelessWidget {
                   min: 5,
                   max: 30,
                   divisions: 5,
-                  activeColor: isDarkMode
-                      ? Colors.orangeAccent
-                      : Colors.blueAccent,
+                  activeColor: accent,
                   onChanged: (value) {
                     setState(() => questionCount = value);
                   },
@@ -270,9 +260,7 @@ class FeaturesSection extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: isDarkMode
-                          ? Colors.orangeAccent
-                          : Colors.blueAccent,
+                      backgroundColor: accent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -280,12 +268,10 @@ class FeaturesSection extends StatelessWidget {
                     ),
                     onPressed: () {
                       Navigator.pop(ctx);
-                      // 🔹 Use these values in your generator logic
                       final int min = int.tryParse(minCtrl.text) ?? 0;
                       final int max = int.tryParse(maxCtrl.text) ?? 100;
                       final int count = questionCount.toInt();
 
-                      // Pass to your question generator screen
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -298,9 +284,12 @@ class FeaturesSection extends StatelessWidget {
                         ),
                       );
                     },
-                    child: const Text(
+                    child: Text(
                       'Start Practice',
-                      style: TextStyle(fontSize: 16, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      ),
                     ),
                   ),
                 ),
@@ -321,6 +310,8 @@ class FeaturesSection extends StatelessWidget {
     List<Map<String, dynamic>> items,
     Color? bgColor,
   ) {
+    final theme = Theme.of(context);
+    final cardFill = theme.cardColor;
     return GridView.count(
       crossAxisCount: 3,
       shrinkWrap: true,
@@ -333,7 +324,7 @@ class FeaturesSection extends StatelessWidget {
           context,
           item['icon'] as IconData,
           item['title'] as String,
-          bgColor,
+          cardFill,
         );
       }).toList(),
     );
@@ -345,6 +336,10 @@ class FeaturesSection extends StatelessWidget {
     String title,
     Color? bgColor,
   ) {
+    final theme = Theme.of(context);
+    final textColor = AppTheme.adaptiveText(context);
+    final accent = AppTheme.adaptiveAccent(context);
+
     return InkWell(
       onTap: () {
         _showPracticeDialog(context, title);
@@ -356,7 +351,7 @@ class FeaturesSection extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black12,
+              color: theme.dividerColor.withOpacity(0.06),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),
@@ -365,18 +360,11 @@ class FeaturesSection extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 26,
-              color: isDarkMode ? Colors.orangeAccent : Colors.blueAccent,
-            ),
+            Icon(icon, size: 26, color: accent),
             const SizedBox(height: 8),
             Text(
               title,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: isDarkMode ? Colors.white : Colors.black87,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w600, color: textColor),
               textAlign: TextAlign.center,
             ),
           ],
@@ -385,7 +373,7 @@ class FeaturesSection extends StatelessWidget {
     );
   }
 
-  // smart cards stay same
+  // smart cards stay same visually but theme-driven
   Widget _smartCard(
     BuildContext context,
     IconData icon,
@@ -394,6 +382,10 @@ class FeaturesSection extends StatelessWidget {
     Color baseColor,
     Color accentColor,
   ) {
+    final textColor = AppTheme.adaptiveText(context);
+    final accent = AppTheme.adaptiveAccent(context);
+    final theme = Theme.of(context);
+
     return InkWell(
       onTap: () {
         // ✅ Launch Daily Ranked Quiz directly
@@ -429,7 +421,7 @@ class FeaturesSection extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: theme.dividerColor.withOpacity(0.06),
               blurRadius: 6,
               offset: const Offset(0, 3),
             ),
@@ -438,11 +430,7 @@ class FeaturesSection extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         child: Row(
           children: [
-            Icon(
-              icon,
-              size: 28,
-              color: isDarkMode ? Colors.orangeAccent : Colors.blueAccent,
-            ),
+            Icon(icon, size: 28, color: AppTheme.adaptiveAccent(context)),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -454,7 +442,7 @@ class FeaturesSection extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w600,
-                      color: isDarkMode ? Colors.white : Colors.black87,
+                      color: textColor,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -462,9 +450,7 @@ class FeaturesSection extends StatelessWidget {
                     subtitle,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDarkMode
-                          ? Colors.white70
-                          : Colors.black.withOpacity(0.6),
+                      color: textColor.withOpacity(0.72),
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,

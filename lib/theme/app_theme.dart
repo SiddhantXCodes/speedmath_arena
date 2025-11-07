@@ -1,26 +1,38 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // 🎨 Brand & accent colors
-  static const MaterialAccentColor lightAccent = Colors.blueAccent;
+  // -------------------------------
+  // Color tokens (single source)
+  // -------------------------------
 
-  // Softer blue-teal for dark mode (eye-comfort optimized)
-  static const MaterialAccentColor darkTealAccent = MaterialAccentColor(
-    0xFF64B5F6, // main tone
-    <int, Color>{
-      100: Color(0xFF4FC3F7),
-      200: Color(0xFF29B6F6),
-      400: Color(0xFF039BE5),
-      700: Color(0xFF0288D1),
-    },
-  );
+  // Dark mode teal family (used as primary in dark theme — matches leaderboard look)
+  static const Color darkTealMain = Color(0xFF00796B); // deep teal
+  static const Color darkTealLight = Color(0xFF26A69A);
+  static const Color darkTealAccent = Color(0xFF00BFA5);
+
+  // Light mode aqua/teal family (complements dark teal)
+  static const Color lightTealMain = Color(
+    0xFF26C6DA,
+  ); // aqua-teal for light mode
+  static const Color lightTealDark = Color(0xFF00ACC1);
 
   // Neutral backgrounds
   static const Color lightBackground = Color(0xFFF8F9FB);
   static const Color darkBackground = Color(0xFF121212);
 
-  // Core brand color (used for highlights and consistency)
-  static const Color primaryColor = Colors.blueAccent;
+  // Surface / cards
+  static const Color lightSurface = Colors.white;
+  static const Color darkSurface = Color(0xFF1E1E1E);
+
+  // Leaderboard / highlight tokens (use these for rank badges, medals, etc.)
+  static const Color rankGold = Color(0xFFFFD700);
+  static const Color rankSilver = Color(0xFFC0C0C0);
+  static const Color rankBronze = Color(0xFFCD7F32);
+
+  // Generic feedback
+  static const Color success = Color(0xFF66BB6A);
+  static const Color warning = Color(0xFFFFC107);
+  static const Color danger = Color(0xFFEF5350);
 
   // -------------------------------
   // LIGHT THEME
@@ -30,29 +42,34 @@ class AppTheme {
     useMaterial3: false,
     scaffoldBackgroundColor: lightBackground,
     colorScheme: ColorScheme.fromSeed(
-      seedColor: primaryColor,
+      seedColor: lightTealMain,
       brightness: Brightness.light,
-      primary: primaryColor,
-      secondary: lightAccent,
-      surface: Colors.white,
+      primary: lightTealMain,
+      secondary: lightTealDark,
+      surface: lightSurface,
       background: lightBackground,
+      onPrimary: Colors.white,
+      onSurface: Colors.black87,
     ),
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       foregroundColor: Colors.black87,
       elevation: 0,
     ),
-    cardColor: Colors.white,
-    iconTheme: IconThemeData(color: lightAccent),
+    cardColor: lightSurface,
+    iconTheme: const IconThemeData(color: lightTealMain),
     dividerColor: Colors.black12,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: lightAccent,
+        backgroundColor: lightTealMain,
         foregroundColor: Colors.white,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(12)),
         ),
       ),
+    ),
+    textSelectionTheme: const TextSelectionThemeData(
+      cursorColor: lightTealDark,
     ),
   );
 
@@ -64,20 +81,22 @@ class AppTheme {
     useMaterial3: false,
     scaffoldBackgroundColor: darkBackground,
     colorScheme: ColorScheme.fromSeed(
-      seedColor: darkTealAccent,
+      seedColor: darkTealMain,
       brightness: Brightness.dark,
-      primary: darkTealAccent,
+      primary: darkTealMain,
       secondary: darkTealAccent,
-      surface: const Color(0xFF1E1E1E),
+      surface: darkSurface,
       background: darkBackground,
+      onPrimary: Colors.white,
+      onSurface: Colors.white70,
     ),
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       foregroundColor: Colors.white,
       elevation: 0,
     ),
-    cardColor: const Color(0xFF1E1E1E),
-    iconTheme: IconThemeData(color: darkTealAccent),
+    cardColor: darkSurface,
+    iconTheme: const IconThemeData(color: darkTealAccent),
     dividerColor: Colors.white24,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
@@ -88,10 +107,13 @@ class AppTheme {
         ),
       ),
     ),
+    textSelectionTheme: const TextSelectionThemeData(
+      cursorColor: darkTealLight,
+    ),
   );
 
   // -------------------------------
-  // Helper utilities (fully reactive)
+  // Helper utilities
   // -------------------------------
 
   /// Dynamically adapts to the active theme's onSurface color.
@@ -108,4 +130,12 @@ class AppTheme {
 
   /// Adapts divider color to theme brightness.
   static Color divider(BuildContext context) => Theme.of(context).dividerColor;
+
+  // Expose rank colors for global reuse (keeps leaderboard look consistent)
+  static Color get gold => rankGold;
+  static Color get silver => rankSilver;
+  static Color get bronze => rankBronze;
+  static Color get successColor => success;
+  static Color get warningColor => warning;
+  static Color get dangerColor => danger;
 }

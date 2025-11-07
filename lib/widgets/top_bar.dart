@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app.dart'; // For ThemeProvider
+import '../theme/app_theme.dart';
 
 class TopBar extends StatelessWidget {
   final int userStreak;
@@ -17,27 +18,31 @@ class TopBar extends StatelessWidget {
     final themeProvider = context.watch<ThemeProvider>();
     final isDarkMode = themeProvider.isDark;
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    // Theme-driven tokens
+    final accent = AppTheme.adaptiveAccent(context);
+    final onSurface = colorScheme.onSurface;
+    final mutedOnSurface = onSurface.withOpacity(0.68);
+    final streakActive = AppTheme.warningColor; // warm highlight for streaks
+    final streakInactive = colorScheme.surfaceVariant.withOpacity(0.18);
 
     return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
+      backgroundColor: theme.appBarTheme.backgroundColor ?? Colors.transparent,
+      elevation: theme.appBarTheme.elevation ?? 0,
       title: AnimatedDefaultTextStyle(
-        duration: const Duration(
-          milliseconds: 300,
-        ), // 🟢 syncs title color fade
+        duration: const Duration(milliseconds: 300),
         style: TextStyle(
           fontWeight: FontWeight.bold,
-          color: theme.colorScheme.onSurface,
+          color: onSurface,
           fontSize: 20,
         ),
         child: const Text('SpeedMath'),
       ),
       actions: [
-        // 🌗 Animated Theme Toggle (icon + fade)
+        // Animated Theme Toggle
         AnimatedSwitcher(
-          duration: const Duration(
-            milliseconds: 350,
-          ), // 🟣 icon animation speed
+          duration: const Duration(milliseconds: 350),
           transitionBuilder: (child, animation) => RotationTransition(
             turns: Tween<double>(begin: 0.70, end: 2).animate(animation),
             child: FadeTransition(opacity: animation, child: child),
@@ -46,7 +51,7 @@ class TopBar extends StatelessWidget {
             key: ValueKey<bool>(isDarkMode),
             icon: Icon(
               isDarkMode ? Icons.wb_sunny_rounded : Icons.dark_mode_rounded,
-              color: isDarkMode ? Colors.amber : theme.colorScheme.primary,
+              color: isDarkMode ? streakActive : accent,
               size: 26,
             ),
             tooltip: isDarkMode
@@ -58,7 +63,7 @@ class TopBar extends StatelessWidget {
 
         const SizedBox(width: 8),
 
-        // 🔥 Streak counter
+        // Streak counter
         GestureDetector(
           onTap: onToggleToday,
           child: Row(
@@ -66,7 +71,7 @@ class TopBar extends StatelessWidget {
               Icon(
                 Icons.local_fire_department,
                 size: 26,
-                color: userStreak > 0 ? Colors.orangeAccent : Colors.grey,
+                color: userStreak > 0 ? streakActive : mutedOnSurface,
               ),
               const SizedBox(width: 4),
               Text(
@@ -74,9 +79,7 @@ class TopBar extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
-                  color: userStreak > 0
-                      ? Colors.orangeAccent
-                      : theme.colorScheme.onSurface.withOpacity(0.7),
+                  color: userStreak > 0 ? streakActive : mutedOnSurface,
                 ),
               ),
             ],
@@ -85,7 +88,7 @@ class TopBar extends StatelessWidget {
 
         const SizedBox(width: 12),
 
-        // 🧑‍💻 Avatar
+        // Avatar
         Padding(
           padding: const EdgeInsets.only(right: 10),
           child: CircleAvatar(

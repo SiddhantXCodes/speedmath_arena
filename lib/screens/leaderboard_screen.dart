@@ -27,18 +27,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final prefs = await SharedPreferences.getInstance();
     todayKey = DateTime.now().toIso8601String().substring(0, 10);
     myScore = prefs.getInt('daily_score_$todayKey') ?? 0;
+
     final random = Random();
 
     dailyLeaderboard = List.generate(10, (i) {
       return {'name': 'User_${1000 + i}', 'score': random.nextInt(100) + 20};
     });
-
     dailyLeaderboard.add({'name': 'You', 'score': myScore ?? 34});
 
     allTimeLeaderboard = List.generate(10, (i) {
       return {'name': 'User_${1000 + i}', 'score': 500 + random.nextInt(500)};
     });
-
     allTimeLeaderboard.add({'name': 'You', 'score': 650});
 
     dailyLeaderboard.sort((a, b) => b['score'].compareTo(a['score']));
@@ -53,27 +52,35 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final colorScheme = theme.colorScheme;
     final textColor = AppTheme.adaptiveText(context);
     final surface = theme.scaffoldBackgroundColor;
+    final cardColor = theme.cardColor;
 
     final currentList = selectedTab == "daily"
         ? dailyLeaderboard
         : allTimeLeaderboard;
 
-    final myRank = currentList.indexWhere((e) => e['name'] == 'You') + 1;
-    final myEntry = currentList.firstWhere(
-      (e) => e['name'] == 'You',
-      orElse: () => {},
-    );
+    // find your rank and entry safely
+    final myIndex = currentList.indexWhere((e) => e['name'] == 'You');
+    final myRank = myIndex == -1 ? null : myIndex + 1;
+    final myEntry = myIndex == -1
+        ? <String, dynamic>{'score': 0, 'name': 'You'}
+        : currentList[myIndex];
 
     return Scaffold(
       backgroundColor: surface,
       appBar: AppBar(
-        title: const Text("Leaderboard"),
+        title: Text("Leaderboard", style: TextStyle(color: textColor)),
         centerTitle: true,
-        backgroundColor: surface,
+        backgroundColor:
+            theme.appBarTheme.backgroundColor ?? Colors.transparent,
         elevation: 0,
+        iconTheme: theme.iconTheme,
       ),
       body: currentList.isEmpty
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(colorScheme.primary),
+              ),
+            )
           : Column(
               children: [
                 const SizedBox(height: 8),
@@ -84,7 +91,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.only(bottom: 90, top: 12),
-                    itemCount: currentList.length - 3,
+                    itemCount: currentList.length > 3
+                        ? currentList.length - 3
+                        : 0,
                     itemBuilder: (context, index) {
                       final entry = currentList[index + 3];
                       final isYou = entry['name'] == 'You';
@@ -99,8 +108,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         ),
                         decoration: BoxDecoration(
                           color: isYou
-                              ? colorScheme.primaryContainer.withOpacity(0.4)
-                              : colorScheme.surfaceVariant.withOpacity(0.3),
+                              ? colorScheme.primary.withOpacity(0.12)
+                              : colorScheme.surfaceVariant.withOpacity(0.06),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Row(
@@ -113,7 +122,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                                 "${index + 4}",
                                 style: TextStyle(
                                   color: isYou
-                                      ? Colors.white
+                                      ? colorScheme.onPrimary
                                       : colorScheme.onPrimaryContainer,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -122,7 +131,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                entry['name'],
+                                entry['name'] ?? 'User',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   color: textColor,
@@ -130,7 +139,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                               ),
                             ),
                             Text(
-                              "${entry['score']} pts",
+                              "${entry['score'] ?? 0} pts",
                               style: TextStyle(
                                 color: textColor.withOpacity(0.8),
                                 fontWeight: FontWeight.w500,
@@ -151,7 +160,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   // --- Top 3 Section ---
   Widget _buildTopThree(BuildContext context, List<Map<String, dynamic>> list) {
     final textColor = AppTheme.adaptiveText(context);
-    final colorScheme = Theme.of(context).colorScheme;
 
     if (list.length < 3) return const SizedBox.shrink();
     final top3 = list.take(3).toList();
@@ -180,6 +188,19 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final textColor = AppTheme.adaptiveText(context);
 
+    // choose whether the badge color is the rank color (1/2/3) or primary
+    final badgeColor = rank == 1
+        ? AppTheme.gold
+        : rank == 2
+        ? AppTheme.silver
+        : rank == 3
+        ? AppTheme.bronze
+        : colorScheme.primary;
+
+    final displayName = (user['name'] == 'You')
+        ? 'You'
+        : (user['name'] ?? '').toString().replaceFirst('User_', '');
+
     return Column(
       children: [
         Stack(
@@ -192,7 +213,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 top: -20,
                 child: Icon(
                   Icons.workspace_premium_rounded,
-                  color: colorScheme.primary,
+                  color: badgeColor,
                   size: 30,
                 ),
               ),
@@ -200,9 +221,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             // Avatar Circle
             CircleAvatar(
               radius: size / 2,
-              backgroundColor: colorScheme.surfaceVariant.withOpacity(0.4),
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.surfaceVariant.withOpacity(0.12),
               child: Text(
-                user['name'] == 'You' ? 'You' : user['name'].substring(5),
+                displayName.isEmpty ? '?' : displayName,
                 style: TextStyle(
                   color: textColor,
                   fontWeight: FontWeight.bold,
@@ -220,13 +243,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   vertical: 2.5,
                 ),
                 decoration: BoxDecoration(
-                  color: colorScheme.primary,
+                  color: badgeColor,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   "#$rank",
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimary,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
@@ -237,10 +260,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         ),
         const SizedBox(height: 20),
         Text(
-          "${user['score']} pts",
+          "${user['score'] ?? 0} pts",
           style: TextStyle(
             fontWeight: FontWeight.w600,
-            color: textColor.withOpacity(0.9),
+            color: AppTheme.adaptiveText(context).withOpacity(0.9),
           ),
         ),
       ],
@@ -249,11 +272,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   // --- Tabs (Daily / All-Time) ---
   Widget _buildTabs(BuildContext context, Color textColor) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor.withOpacity(0.5),
+        color: theme.cardColor.withOpacity(0.06),
         borderRadius: BorderRadius.circular(30),
       ),
       padding: const EdgeInsets.all(4),
@@ -291,7 +315,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             child: Text(
               label,
               style: TextStyle(
-                color: isActive ? Colors.white : textColor.withOpacity(0.7),
+                color: isActive
+                    ? colorScheme.onPrimary
+                    : textColor.withOpacity(0.7),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -304,20 +330,23 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   // --- Sticky "You" card ---
   Widget _buildYouCard(
     BuildContext context,
-    int myRank,
+    int? myRank,
     Map<String, dynamic> myEntry,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
     final textColor = AppTheme.adaptiveText(context);
 
+    final yourScore = myEntry['score'] ?? 0;
+    final rankText = myRank == null ? '-' : myRank.toString();
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       margin: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: colorScheme.primary.withOpacity(0.15),
+        color: colorScheme.primary.withOpacity(0.12),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: colorScheme.primary.withOpacity(0.3),
+          color: colorScheme.primary.withOpacity(0.22),
           width: 1,
         ),
       ),
@@ -329,9 +358,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               CircleAvatar(
                 backgroundColor: colorScheme.primary,
                 child: Text(
-                  "$myRank",
-                  style: const TextStyle(
-                    color: Colors.white,
+                  rankText,
+                  style: TextStyle(
+                    color: colorScheme.onPrimary,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -349,7 +378,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     ),
                   ),
                   Text(
-                    "Score: ${myEntry['score'] ?? 0}",
+                    "Score: $yourScore",
                     style: TextStyle(color: textColor.withOpacity(0.7)),
                   ),
                 ],
