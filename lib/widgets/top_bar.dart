@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../theme/app_theme.dart';
-import '../app.dart'; // ✅ For ThemeProvider
+import '../app.dart'; // For ThemeProvider
 
 class TopBar extends StatelessWidget {
   final int userStreak;
@@ -17,29 +16,37 @@ class TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final isDarkMode = themeProvider.isDark;
-    final textColor = AppTheme.adaptiveText(context);
-    final accent = AppTheme.adaptiveAccent(context);
+    final theme = Theme.of(context);
 
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      title: Text(
-        'SpeedMath',
-        style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
+      title: AnimatedDefaultTextStyle(
+        duration: const Duration(
+          milliseconds: 300,
+        ), // 🟢 syncs title color fade
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+          fontSize: 20,
+        ),
+        child: const Text('SpeedMath'),
       ),
       actions: [
-        // 🌗 Animated Theme Toggle
+        // 🌗 Animated Theme Toggle (icon + fade)
         AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
+          duration: const Duration(
+            milliseconds: 350,
+          ), // 🟣 icon animation speed
           transitionBuilder: (child, animation) => RotationTransition(
-            turns: Tween<double>(begin: 0.75, end: 1).animate(animation),
+            turns: Tween<double>(begin: 0.70, end: 2).animate(animation),
             child: FadeTransition(opacity: animation, child: child),
           ),
           child: IconButton(
             key: ValueKey<bool>(isDarkMode),
             icon: Icon(
               isDarkMode ? Icons.wb_sunny_rounded : Icons.dark_mode_rounded,
-              color: isDarkMode ? Colors.amber : accent,
+              color: isDarkMode ? Colors.amber : theme.colorScheme.primary,
               size: 26,
             ),
             tooltip: isDarkMode
@@ -69,7 +76,7 @@ class TopBar extends StatelessWidget {
                   fontSize: 18,
                   color: userStreak > 0
                       ? Colors.orangeAccent
-                      : textColor.withOpacity(0.7),
+                      : theme.colorScheme.onSurface.withOpacity(0.7),
                 ),
               ),
             ],

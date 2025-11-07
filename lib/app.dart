@@ -9,7 +9,7 @@ final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
 
 class ThemeProvider extends ChangeNotifier {
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = ThemeMode.light;
 
   ThemeMode get themeMode => _themeMode;
   bool get isDark => _themeMode == ThemeMode.dark;
@@ -18,7 +18,7 @@ class ThemeProvider extends ChangeNotifier {
     _themeMode = _themeMode == ThemeMode.dark
         ? ThemeMode.light
         : ThemeMode.dark;
-    notifyListeners();
+    notifyListeners(); // 🚀 triggers rebuild instantly
   }
 }
 
@@ -37,22 +37,28 @@ class SpeedMathApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
-          final themeMode = themeProvider.themeMode;
+          final isDark = themeProvider.isDark;
 
+          // 🧠 Use AnimatedTheme for smooth cross-fade between themes
           return AnimatedTheme(
-            data: themeMode == ThemeMode.dark
-                ? AppTheme.darkTheme
-                : AppTheme.lightTheme,
-            // 💡 Change this to 200ms if you want a *smooth fade* instead
-            duration: Duration.zero, // ✅ Instant theme change
+            data: isDark ? AppTheme.darkTheme : AppTheme.lightTheme,
+            duration: const Duration(
+              milliseconds: 300,
+            ), // 🟢 theme animation speed
+            curve: Curves.easeInOut,
             child: MaterialApp(
               title: 'SpeedMath',
               debugShowCheckedModeBanner: false,
-              themeMode: themeMode,
+              themeMode: themeProvider.themeMode,
               theme: AppTheme.lightTheme,
               darkTheme: AppTheme.darkTheme,
               navigatorObservers: [routeObserver],
-              home: const HomeScreen(),
+
+              // 🧩 Builder with ValueKey ensures new context on toggle (no delay)
+              home: Builder(
+                key: ValueKey(isDark),
+                builder: (_) => const HomeScreen(),
+              ),
             ),
           );
         },

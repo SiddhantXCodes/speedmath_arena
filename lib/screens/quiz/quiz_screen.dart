@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../../providers/practice_log_provider.dart';
 import '../../utils/question_generator.dart';
-
+import '../../theme/app_theme.dart';
 // sub-widgets
 import 'quiz_keyboard.dart';
 import 'quiz_options.dart';
@@ -302,10 +302,10 @@ class _QuizScreenState extends State<QuizScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    primary = isDark ? const Color(0xFF1E2020) : Colors.blueAccent;
-    bgColor = isDark ? const Color(0xFF0E0F11) : Colors.grey[50]!;
-    cardColor = isDark ? Colors.grey[850]! : Colors.white;
-    textColor = isDark ? Colors.white : Colors.black87;
+    primary = AppTheme.adaptiveAccent(context);
+    bgColor = Theme.of(context).scaffoldBackgroundColor;
+    cardColor = AppTheme.adaptiveCard(context);
+    textColor = AppTheme.adaptiveText(context);
 
     if (questions.isEmpty) {
       return Scaffold(

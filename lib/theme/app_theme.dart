@@ -19,7 +19,7 @@ class AppTheme {
   static const Color lightBackground = Color(0xFFF8F9FB);
   static const Color darkBackground = Color(0xFF121212);
 
-  // Core brand color (used for app bars and highlights)
+  // Core brand color (used for highlights and consistency)
   static const Color primaryColor = Colors.deepPurple;
 
   // -------------------------------
@@ -29,19 +29,22 @@ class AppTheme {
     brightness: Brightness.light,
     useMaterial3: false,
     scaffoldBackgroundColor: lightBackground,
-    colorScheme: ColorScheme.light(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: primaryColor,
+      brightness: Brightness.light,
       primary: primaryColor,
       secondary: lightAccent,
       surface: Colors.white,
       background: lightBackground,
     ),
     appBarTheme: const AppBarTheme(
-      backgroundColor: primaryColor,
-      foregroundColor: Colors.white,
+      backgroundColor: Colors.transparent,
+      foregroundColor: Colors.black87,
       elevation: 0,
     ),
     cardColor: Colors.white,
-    iconTheme: IconThemeData(color: lightAccent.shade200),
+    iconTheme: IconThemeData(color: lightAccent),
+    dividerColor: Colors.black12,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: lightAccent,
@@ -60,19 +63,22 @@ class AppTheme {
     brightness: Brightness.dark,
     useMaterial3: false,
     scaffoldBackgroundColor: darkBackground,
-    colorScheme: ColorScheme.dark(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: darkTealAccent,
+      brightness: Brightness.dark,
       primary: darkTealAccent,
       secondary: darkTealAccent,
       surface: const Color(0xFF1E1E1E),
       background: darkBackground,
     ),
     appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFF1E1E1E),
+      backgroundColor: Colors.transparent,
       foregroundColor: Colors.white,
       elevation: 0,
     ),
     cardColor: const Color(0xFF1E1E1E),
-    iconTheme: IconThemeData(color: darkTealAccent.shade200),
+    iconTheme: IconThemeData(color: darkTealAccent),
+    dividerColor: Colors.white24,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: darkTealAccent,
@@ -85,25 +91,21 @@ class AppTheme {
   );
 
   // -------------------------------
-  // Helper utilities
+  // Helper utilities (fully reactive)
   // -------------------------------
-  static Color adaptiveText(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return isDark ? Colors.white : Colors.black87;
-  }
 
-  static Color adaptiveCard(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return isDark ? const Color(0xFF1E1E1E) : Colors.white;
-  }
+  /// Dynamically adapts to the active theme's onSurface color.
+  static Color adaptiveText(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurface;
 
-  static Color adaptiveAccent(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return isDark ? darkTealAccent : lightAccent;
-  }
+  /// Adapts card color (based on surface background tone).
+  static Color adaptiveCard(BuildContext context) =>
+      Theme.of(context).colorScheme.surface;
 
-  static Color divider(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return isDark ? Colors.white24 : Colors.black12;
-  }
+  /// Adapts accent/primary color (used for icons or highlights).
+  static Color adaptiveAccent(BuildContext context) =>
+      Theme.of(context).colorScheme.primary;
+
+  /// Adapts divider color to theme brightness.
+  static Color divider(BuildContext context) => Theme.of(context).dividerColor;
 }
