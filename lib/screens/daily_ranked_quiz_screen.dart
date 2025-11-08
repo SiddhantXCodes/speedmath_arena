@@ -173,6 +173,7 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
     await prefs.setInt('daily_correct_${_todayKey}', correct);
     await prefs.setInt('daily_incorrect_${_todayKey}', incorrect);
 
+    // 🔹 Online sync
     if (user != null) {
       try {
         final uid = user.uid;
@@ -231,7 +232,7 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
       }
     }
 
-    // Update local providers
+    // 🔹 Offline sync (Hive Providers)
     try {
       final performance = Provider.of<PerformanceProvider>(
         context,
@@ -243,11 +244,22 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
         context,
         listen: false,
       );
+
+      // ✅ Add ranked session to offline logs
+      final totalTime = 180 - remainingSeconds;
+      final avgTime = (questions.isNotEmpty)
+          ? (totalTime / questions.length)
+          : 0.0;
+
       await logProvider.addSession(
         topic: 'Daily Ranked Quiz',
-        score: correct,
+        category: 'Ranked',
+        correct: correct,
+        incorrect: incorrect,
+        score: safeScore,
         total: questions.length,
-        timeSpentSeconds: 180 - remainingSeconds,
+        avgTime: avgTime,
+        timeSpentSeconds: totalTime,
       );
     } catch (e) {
       debugPrint("⚠️ Local provider failed: $e");

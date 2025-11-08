@@ -243,10 +243,17 @@ class _QuizScreenState extends State<QuizScreen> {
         context,
         listen: false,
       );
+
       await logProvider.addSession(
         topic: widget.title,
-        score: correctCount,
+        category: 'Practice', // 🔹 default since this is a normal quiz
+        correct: correctCount,
+        incorrect: incorrectCount,
+        score: correctCount, // or use a scoring formula if needed
         total: questions.length,
+        avgTime: questions.isNotEmpty
+            ? _stopwatch.elapsed.inSeconds / questions.length
+            : 0.0,
         timeSpentSeconds: _stopwatch.elapsed.inSeconds,
       );
     } catch (e) {

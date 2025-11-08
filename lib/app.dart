@@ -1,3 +1,4 @@
+// lib/app.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
@@ -8,6 +9,7 @@ import 'theme/app_theme.dart';
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
 
+/// ✅ ThemeProvider — controls light/dark mode across app
 class ThemeProvider extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.light;
 
@@ -18,10 +20,11 @@ class ThemeProvider extends ChangeNotifier {
     _themeMode = _themeMode == ThemeMode.dark
         ? ThemeMode.light
         : ThemeMode.dark;
-    notifyListeners(); // 🚀 triggers rebuild instantly
+    notifyListeners(); // 🚀 triggers full rebuild
   }
 }
 
+/// ✅ Root app
 class SpeedMathApp extends StatelessWidget {
   const SpeedMathApp({super.key});
 
@@ -29,7 +32,10 @@ class SpeedMathApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // global theme provider
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+
+        // app-specific providers
         ChangeNotifierProvider(
           create: (_) => PerformanceProvider()..loadFromStorage(),
         ),
@@ -39,22 +45,21 @@ class SpeedMathApp extends StatelessWidget {
         builder: (context, themeProvider, _) {
           final isDark = themeProvider.isDark;
 
-          // 🧠 Use AnimatedTheme for smooth cross-fade between themes
           return AnimatedTheme(
             data: isDark ? AppTheme.darkTheme : AppTheme.lightTheme,
-            duration: const Duration(
-              milliseconds: 300,
-            ), // 🟢 theme animation speed
-            curve: Curves.easeInOut,
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeInOutCubic,
             child: MaterialApp(
-              title: 'SpeedMath',
+              title: 'SpeedMaths Pro',
               debugShowCheckedModeBanner: false,
+
+              // 🧠 Attach theme data
               themeMode: themeProvider.themeMode,
               theme: AppTheme.lightTheme,
               darkTheme: AppTheme.darkTheme,
               navigatorObservers: [routeObserver],
 
-              // 🧩 Builder with ValueKey ensures new context on toggle (no delay)
+              // 🧩 Builder + ValueKey ensures instant redraw on toggle
               home: Builder(
                 key: ValueKey(isDark),
                 builder: (_) => const HomeScreen(),

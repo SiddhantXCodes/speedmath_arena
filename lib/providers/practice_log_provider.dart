@@ -1,114 +1,103 @@
-import 'dart:convert';
+// lib/providers/practice_log_provider.dart
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart';
+import '../data/models/practice_log.dart';
+import '../data/hive_service.dart';
 
 class PracticeLogProvider extends ChangeNotifier {
-  Map<DateTime, Map<String, dynamic>> _logs = {}; // date → details
+  List<PracticeLog> _logs = [];
 
-  Map<DateTime, Map<String, dynamic>> get logs => _logs;
+  List<PracticeLog> get logs => _logs;
 
   PracticeLogProvider() {
     _loadLogs();
   }
 
   // ----------------------------------------
-  // Load logs from SharedPreferences
+  // Load all practice logs from Hive
   // ----------------------------------------
   Future<void> _loadLogs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final rawData = prefs.getString('practice_logs');
-    if (rawData != null && rawData.isNotEmpty) {
-      final decoded = jsonDecode(rawData) as Map<String, dynamic>;
-      _logs = decoded.map((key, value) {
-        final date = DateTime.parse(key);
-        return MapEntry(date, Map<String, dynamic>.from(value));
-      });
-    } else {
-      _logs = {};
-    }
+    _logs = HiveService.getPracticeLogs();
     notifyListeners();
   }
 
   // ----------------------------------------
-  // Add new session (called after each quiz)
+  // Add a new practice session (after quiz ends)
+  // Works for: Offline quizzes, Ranked quizzes, Smart practice, etc.
   // ----------------------------------------
   Future<void> addSession({
     required String topic,
+    required String category,
+    required int correct,
+    required int incorrect,
     required int score,
     required int total,
+    required double avgTime,
     required int timeSpentSeconds,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final today = DateTime.now();
-    final dateKey = DateTime(today.year, today.month, today.day);
+    try {
+      final log = PracticeLog(
+        date: DateTime.now(),
+        topic: topic,
+        category: category,
+        correct: correct,
+        incorrect: incorrect,
+        score: score,
+        total: total,
+        avgTime: avgTime,
+        timeSpentSeconds: timeSpentSeconds,
+      );
 
-    // Create or update existing record
-    final current =
-        _logs[dateKey] ??
-        {
-          'sessions': 0,
-          'topics': <String>[],
-          'totalScore': 0,
-          'totalQuestions': 0,
-          'timeSpent': 0,
-        };
-
-    current['sessions'] += 1;
-    current['topics'].add(topic);
-    current['totalScore'] += score;
-    current['totalQuestions'] += total;
-    current['timeSpent'] += timeSpentSeconds;
-
-    _logs[dateKey] = current;
-
-    // Save to local storage
-    final encoded = _logs.map(
-      (key, value) => MapEntry(key.toIso8601String(), value),
-    );
-    await prefs.setString('practice_logs', jsonEncode(encoded));
-
-    notifyListeners();
+      await HiveService.addPracticeLog(log);
+      _logs.add(log);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("⚠️ Failed to add session: $e");
+    }
   }
 
   // ----------------------------------------
-  // Get intensity map for HeatmapSection
+  // Get daily intensity map for HeatmapSection
   // ----------------------------------------
-  Map<DateTime, int> getActivityMap() {
-    return _logs.map((date, data) {
-      final sessions = data['sessions'] ?? 0;
-      return MapEntry(date, sessions.clamp(0, 5));
-    });
-  }
+  Map<DateTime, int> getActivityMap() => HiveService.getActivityMap();
 
   // ----------------------------------------
-  // Get details for a specific day
+  // Get detailed summary for a specific day
   // ----------------------------------------
   Map<String, dynamic>? getDaySummary(DateTime date) {
     final key = DateTime(date.year, date.month, date.day);
-    return _logs[key];
-  }
-
-  // Clear all logs (for testing)
-  Future<void> clearAll() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('practice_logs');
-    _logs.clear();
-    notifyListeners();
-  }
-
-  Future<void> _saveLogs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final encoded = _logs.map(
-      (key, value) => MapEntry(key.toIso8601String(), value),
+    final dayLogs = _logs.where(
+      (log) =>
+          log.date.year == key.year &&
+          log.date.month == key.month &&
+          log.date.day == key.day,
     );
-    await prefs.setString('practice_logs', jsonEncode(encoded));
+
+    if (dayLogs.isEmpty) return null;
+
+    int totalCorrect = 0;
+    int totalIncorrect = 0;
+    double totalTime = 0;
+
+    for (var log in dayLogs) {
+      totalCorrect += log.correct;
+      totalIncorrect += log.incorrect;
+      totalTime += log.avgTime;
+    }
+
+    return {
+      'sessions': dayLogs.length,
+      'correct': totalCorrect,
+      'incorrect': totalIncorrect,
+      'avgTime': totalTime / dayLogs.length,
+    };
   }
 
-  Future<void> removeSession(DateTime date) async {
-    final key = DateFormat('yyyy-MM-dd').format(date);
-    _logs.remove(key);
-    await _saveLogs();
+  // ----------------------------------------
+  // Clear all logs (testing / reset)
+  // ----------------------------------------
+  Future<void> clearAll() async {
+    await HiveService.clearPracticeLogs();
+    _logs.clear();
     notifyListeners();
   }
 }

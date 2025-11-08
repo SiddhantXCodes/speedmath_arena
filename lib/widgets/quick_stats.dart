@@ -1,12 +1,11 @@
-// lib/widgets/quick_stats.dart
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../screens/login_screen.dart';
 import '../screens/daily_ranked_quiz_screen.dart';
 import '../screens/leaderboard_screen.dart';
+import '../data/hive_service.dart';
 
 class QuickStatsSection extends StatefulWidget {
   final bool isDarkMode;
@@ -22,7 +21,12 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
   int? allTimeRank;
   double weeklyAverage = 0;
   bool _loading = true;
-  List<FlSpot> weekSpots = [];
+
+  // --- offline stats ---
+  int offlineSessions = 0;
+  int offlineCorrect = 0;
+  int offlineIncorrect = 0;
+  double offlineAvgTime = 0.0;
 
   @override
   void initState() {
@@ -37,7 +41,6 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
     super.dispose();
   }
 
-  // Auto-refresh when user returns to app
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -50,6 +53,13 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
 
   Future<void> _fetchStats() async {
     try {
+      // --- Load offline stats first (always fast) ---
+      final localStats = HiveService.getStats() ?? {};
+      offlineSessions = (localStats['sessions'] ?? 0) as int;
+      offlineCorrect = (localStats['totalCorrect'] ?? 0) as int;
+      offlineIncorrect = (localStats['totalIncorrect'] ?? 0) as int;
+      offlineAvgTime = (localStats['avgTime'] ?? 0.0) as double;
+
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         setState(() => _loading = false);
@@ -91,29 +101,7 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
         weeklyAverage = quizzes > 0 ? totalScore / quizzes : 0;
       }
 
-      // ---- Last 7 days chart ----
-      final now = DateTime.now();
-      final List<FlSpot> points = [];
-      for (int i = 6; i >= 0; i--) {
-        final day = now.subtract(Duration(days: i));
-        final key = _dateKey(day);
-        final doc = await firestore
-            .collection('daily_leaderboard')
-            .doc(key)
-            .collection('entries')
-            .doc(user.uid)
-            .get();
-        double score = 0;
-        if (doc.exists) score = (doc.data()?['score'] ?? 0).toDouble();
-        points.add(FlSpot((6 - i).toDouble(), score));
-      }
-
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          weekSpots = points;
-        });
-      }
+      if (mounted) setState(() => _loading = false);
     } catch (e) {
       debugPrint("⚠️ Error loading stats: $e");
       if (mounted) setState(() => _loading = false);
@@ -198,13 +186,13 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
           else
             _buildStats(context, accent, textColor),
           const SizedBox(height: 16),
-          _buildChart(context, weekSpots, textColor, accent, cardColor),
+          _buildOfflineStats(context, textColor, accent),
         ],
       ),
     );
   }
 
-  // --- Stats Display ---
+  // --- Online Stats Display (kept same) ---
   Widget _buildStats(BuildContext context, Color accent, Color textColor) {
     return Column(
       children: [
@@ -257,84 +245,42 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
     );
   }
 
-  // --- Chart ---
-  Widget _buildChart(
+  // --- New Offline Practice Stats Section ---
+  Widget _buildOfflineStats(
     BuildContext context,
-    List<FlSpot> spots,
     Color textColor,
     Color accent,
-    Color cardColor,
   ) {
-    if (spots.isEmpty) {
-      return const SizedBox(
-        height: 120,
-        child: Center(child: Text("No activity data yet.")),
-      );
-    }
-
-    final maxY =
-        spots.map((e) => e.y).fold<double>(0, (a, b) => b > a ? b : a) + 10;
-
-    return SizedBox(
-      height: 150,
-      child: LineChart(
-        LineChartData(
-          minX: 0,
-          maxX: 6,
-          minY: 0,
-          maxY: maxY,
-          gridData: FlGridData(show: false),
-          borderData: FlBorderData(show: false),
-          titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 20,
-                getTitlesWidget: (value, _) {
-                  const labels = [
-                    'Mon',
-                    'Tue',
-                    'Wed',
-                    'Thu',
-                    'Fri',
-                    'Sat',
-                    'Sun',
-                  ];
-                  final i = value.toInt();
-                  if (i < 0 || i >= labels.length) return const SizedBox();
-                  return Text(
-                    labels[i],
-                    style: TextStyle(
-                      color: textColor.withOpacity(0.6),
-                      fontSize: 10,
-                    ),
-                  );
-                },
-              ),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Offline Practice Summary",
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: textColor,
           ),
-          lineBarsData: [
-            LineChartBarData(
-              spots: spots,
-              isCurved: true,
-              color: accent,
-              barWidth: 2.5,
-              dotData: FlDotData(show: true),
-              belowBarData: BarAreaData(
-                show: true,
-                color: accent.withOpacity(0.18),
-              ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _statItem("Sessions", "$offlineSessions", textColor),
+            _statItem("Correct", "$offlineCorrect", textColor),
+            _statItem("Wrong", "$offlineIncorrect", textColor),
+            _statItem(
+              "Avg Time",
+              "${offlineAvgTime.toStringAsFixed(1)}s",
+              textColor,
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 
-  // --- Helper UI Components ---
+  // --- Helper UI Components (unchanged) ---
   Widget _statItem(String title, String value, Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
