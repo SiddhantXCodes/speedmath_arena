@@ -1,4 +1,3 @@
-// lib/providers/practice_log_provider.dart
 import 'package:flutter/material.dart';
 import '../data/models/practice_log.dart';
 import '../data/hive_service.dart';
@@ -33,6 +32,8 @@ class PracticeLogProvider extends ChangeNotifier {
     required int total,
     required double avgTime,
     required int timeSpentSeconds,
+    List<Map<String, dynamic>>? questions, // ✅ new optional param
+    Map<int, String>? userAnswers, // ✅ new optional param
   }) async {
     try {
       final log = PracticeLog(
@@ -45,6 +46,8 @@ class PracticeLogProvider extends ChangeNotifier {
         total: total,
         avgTime: avgTime,
         timeSpentSeconds: timeSpentSeconds,
+        questions: questions ?? [],
+        userAnswers: userAnswers ?? {},
       );
 
       await HiveService.addPracticeLog(log);
@@ -90,6 +93,30 @@ class PracticeLogProvider extends ChangeNotifier {
       'incorrect': totalIncorrect,
       'avgTime': totalTime / dayLogs.length,
     };
+  }
+
+  // ----------------------------------------
+  // Return all sessions as maps for History Screen
+  // Includes both summary and stored question data
+  // ----------------------------------------
+  List<Map<String, dynamic>> getAllSessions() {
+    return _logs.map((log) {
+      return {
+        'source': 'offline',
+        'date': log.date,
+        'topic': log.topic,
+        'category': log.category,
+        'correct': log.correct,
+        'incorrect': log.incorrect,
+        'total': log.total,
+        'score': log.score,
+        'timeSpentSeconds': log.timeSpentSeconds,
+        // ✅ Defensive fix: in case old Hive logs don't have these fields
+        'questions': log.questions ?? [],
+        'userAnswers': log.userAnswers ?? {},
+        'raw': log,
+      };
+    }).toList();
   }
 
   // ----------------------------------------

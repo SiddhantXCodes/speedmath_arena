@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../data/models/daily_score.dart';
 import '../data/hive_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class PerformanceProvider extends ChangeNotifier {
   final Map<DateTime, int> _dailyScores = {};
@@ -88,6 +90,65 @@ class PerformanceProvider extends ChangeNotifier {
     final s = _dailyScores[today] ?? 0;
     if (s <= 0) return null;
     return (5000 - (s * 10)).clamp(1000, 5000).toInt();
+  }
+
+  /// Fetch recent online attempts for the currently signed-in user.
+  /// Returns a list of maps with a unified shape used by the AttemptsHistory screen.
+  Future<List<Map<String, dynamic>>> fetchOnlineAttempts({
+    int limit = 200,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return [];
+
+      // collectionGroup('entries') reads the per-day entries documents (daily_leaderboard/{date}/entries/{uid})
+      final query = await FirebaseFirestore.instance
+          .collectionGroup('entries')
+          .where('uid', isEqualTo: user.uid)
+          .orderBy('timestamp', descending: true)
+          .limit(limit)
+          .get();
+
+      final List<Map<String, dynamic>> out = [];
+
+      for (final doc in query.docs) {
+        final data = doc.data();
+        // Normalize fields into a consistent map
+        final Timestamp? ts = data['timestamp'] as Timestamp?;
+        final DateTime date = ts?.toDate() ?? DateTime.now();
+
+        final int correct = (data['correct'] ?? 0) as int;
+        final int incorrect = (data['incorrect'] ?? 0) as int;
+        final int total =
+            (data['total'] ?? (correct + incorrect)) as int? ??
+            (correct + incorrect);
+        final int score = (data['score'] ?? 0) as int;
+        final int timeTaken =
+            (data['timeTaken'] ?? data['timeSpent'] ?? 0) as int;
+
+        out.add({
+          'source': 'online',
+          'date': date,
+          'topic': data['topic'] ?? 'Daily Ranked',
+          'category': data['category'] ?? 'Daily Ranked',
+          'correct': correct,
+          'incorrect': incorrect,
+          'total': total,
+          'score': score,
+          'timeSpentSeconds': timeTaken,
+          'questions':
+              data['questions'] ?? [], // optional if server stored them
+          'userAnswers':
+              data['userAnswers'] ?? {}, // optional if server stored them
+          'raw': data,
+        });
+      }
+
+      return out;
+    } catch (e, st) {
+      debugPrint('⚠️ fetchOnlineAttempts failed: $e\n$st');
+      return [];
+    }
   }
 
   // ----------------------------------------

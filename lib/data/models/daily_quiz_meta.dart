@@ -1,7 +1,7 @@
 import 'package:hive/hive.dart';
 part 'daily_quiz_meta.g.dart';
 
-@HiveType(typeId: 11)
+@HiveType(typeId: 5)
 class DailyQuizMeta {
   @HiveField(0)
   final String date;

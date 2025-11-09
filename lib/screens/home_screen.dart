@@ -9,7 +9,8 @@ import '../providers/practice_log_provider.dart';
 import '../theme/app_theme.dart';
 import '../app.dart';
 import 'performance_screen.dart';
-import 'mixed_practice/mixed_quiz_setup.dart'; // ✅ New import
+import 'mixed_practice/mixed_quiz_setup.dart';
+import 'history/attempts_history_screen.dart'; // ✅ NEW IMPORT
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -106,115 +107,31 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                 ),
                 const SizedBox(height: 24),
 
-                // ✅ Performance Insights Card
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const PerformanceScreen(),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.adaptiveCard(context),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Performance Insights",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.adaptiveText(context),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              "Track your progress & accuracy trends",
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppTheme.adaptiveText(
-                                  context,
-                                ).withOpacity(0.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Icon(Icons.trending_up_rounded, size: 32),
-                      ],
+                // ✅ 1️⃣ Performance Insights Card
+                _buildCard(
+                  context,
+                  title: "Performance Insights",
+                  subtitle: "Track your progress & accuracy trends",
+                  icon: Icons.trending_up_rounded,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PerformanceScreen(),
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
 
-                // ✅ New: Mixed Practice Card
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const MixedQuizSetupScreen(),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.adaptiveCard(context),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Mixed Practice",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.adaptiveText(context),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              "Create your own quiz from multiple topics",
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppTheme.adaptiveText(
-                                  context,
-                                ).withOpacity(0.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Icon(Icons.shuffle_rounded, size: 32),
-                      ],
+                // ✅ 3️⃣ NEW — Practice History Card
+                _buildCard(
+                  context,
+                  title: "Practice History",
+                  subtitle: "Review all your past attempts (offline + online)",
+                  icon: Icons.history_rounded,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AttemptsHistoryScreen(),
                     ),
                   ),
                 ),
@@ -226,6 +143,63 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.adaptiveCard(context),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.adaptiveText(context),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.adaptiveText(context).withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Icon(icon, size: 32, color: AppTheme.adaptiveText(context)),
+          ],
         ),
       ),
     );

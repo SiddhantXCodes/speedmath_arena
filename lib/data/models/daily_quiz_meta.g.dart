@@ -8,7 +8,7 @@ part of 'daily_quiz_meta.dart';
 
 class DailyQuizMetaAdapter extends TypeAdapter<DailyQuizMeta> {
   @override
-  final int typeId = 11;
+  final int typeId = 5;
 
   @override
   DailyQuizMeta read(BinaryReader reader) {

@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../utils/question_generator.dart';
 import 'leaderboard_screen.dart';
 import 'home_screen.dart';
+import 'history/attempts_history_screen.dart'; // ✅ for AttemptReviewScreen
 
 class DailyRankedResultScreen extends StatelessWidget {
   final int total;
@@ -32,6 +33,20 @@ class DailyRankedResultScreen extends StatelessWidget {
 
     final mins = (timeTaken ~/ 60).toString().padLeft(2, '0');
     final secs = (timeTaken % 60).toString().padLeft(2, '0');
+
+    // 🔹 Unified attempt map (so it can be passed to AttemptReviewScreen)
+    final attemptData = {
+      'topic': 'Daily Ranked Quiz',
+      'category': 'Ranked',
+      'date': DateTime.now(),
+      'correct': correct,
+      'incorrect': incorrect,
+      'total': total,
+      'score': score,
+      'timeSpentSeconds': timeTaken,
+      'questions': questions,
+      'userAnswers': answers,
+    };
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -97,7 +112,7 @@ class DailyRankedResultScreen extends StatelessWidget {
 
             const SizedBox(height: 20),
 
-            // 🔘 Buttons
+            // 🔘 Buttons Row
             Row(
               children: [
                 Expanded(
@@ -154,15 +169,42 @@ class DailyRankedResultScreen extends StatelessWidget {
               ],
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
+            // 🧠 Full Review Button
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AttemptReviewScreen(attempt: attemptData),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.visibility_rounded, color: Colors.white),
+              label: const Text(
+                "Full Review",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accent,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
             Divider(
               height: 30,
               thickness: 1,
               color: textColor.withOpacity(0.2),
             ),
 
-            const SizedBox(height: 4),
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -176,7 +218,7 @@ class DailyRankedResultScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
 
-            // 📋 Question list
+            // 📋 Inline Review List
             Expanded(
               child: ListView.builder(
                 itemCount: questions.length,

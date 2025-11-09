@@ -3,7 +3,10 @@ import '../screens/number_of_questions_selector_popup.dart';
 import '../screens/quiz/quiz_screen.dart';
 import '../screens/daily_ranked_quiz_screen.dart';
 import '../screens/leaderboard_screen.dart';
+import '../screens/performance_screen.dart';
 import '../theme/app_theme.dart';
+import '../screens/mixed_practice/mixed_quiz_setup.dart';
+import '../screens/tips_tricks_screen.dart';
 
 class FeaturesSection extends StatelessWidget {
   final bool isDarkMode;
@@ -51,13 +54,13 @@ class FeaturesSection extends StatelessWidget {
         // use accent but slightly muted
         'color': accent.withOpacity(0.14),
       },
-      {
-        'icon': Icons.local_fire_department_rounded,
-        'title': 'Streak Challenge',
-        'subtitle': 'Maintain daily practice',
-        // warning / energetic color
-        'color': AppTheme.warningColor.withOpacity(0.18),
-      },
+      // {
+      //   'icon': Icons.local_fire_department_rounded,
+      //   'title': 'Streak Challenge',
+      //   'subtitle': 'Maintain daily practice',
+      //   // warning / energetic color
+      //   'color': AppTheme.warningColor.withOpacity(0.18),
+      // },
     ];
 
     final basics = [
@@ -74,7 +77,6 @@ class FeaturesSection extends StatelessWidget {
       {'icon': Icons.terrain, 'title': 'Trigonometry'},
       {'icon': Icons.table_chart, 'title': 'Tables'},
       {'icon': Icons.insights, 'title': 'Data Interpretation'},
-      {'icon': Icons.category_rounded, 'title': 'Mixed Questions'},
     ];
 
     return SingleChildScrollView(
@@ -396,19 +398,28 @@ class FeaturesSection extends StatelessWidget {
           );
           return;
         }
+        if (title == 'Mixed Practice') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MixedQuizSetupScreen()),
+          );
+          return;
+        }
         // ✅ Launch Leaderboard for Performance card
         if (title == 'Performance') {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
+            MaterialPageRoute(builder: (_) => const PerformanceScreen()),
           );
           return;
         }
-        // Otherwise, keep existing logic
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => FeatureDetailScreen(title: title)),
-        );
+        if (title == 'Tips & Tricks') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const TipsAndTricksScreen()),
+          );
+          return;
+        }
       },
       borderRadius: BorderRadius.circular(14),
       child: Container(

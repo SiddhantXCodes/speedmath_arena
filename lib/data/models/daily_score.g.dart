@@ -8,7 +8,7 @@ part of 'daily_score.dart';
 
 class DailyScoreAdapter extends TypeAdapter<DailyScore> {
   @override
-  final int typeId = 7;
+  final int typeId = 6;
 
   @override
   DailyScore read(BinaryReader reader) {

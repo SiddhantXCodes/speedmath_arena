@@ -85,10 +85,8 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
   }
 
   void _generateLocalQuestions() {
-    questions = List.generate(
-      5,
-      (i) => Question(expression: "5 + $i = ?", correctAnswer: "${5 + i}"),
-    );
+    // 🔹 Replace this with your shared logic or remote daily seed if you like
+    questions = QuestionGenerator.generate("Daily Ranked", 1, 50, 10);
     _animateProgress();
     _startTimer();
     setState(() {});
@@ -160,6 +158,7 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
     });
   }
 
+  // ✅ Updated with full offline + online logging
   Future<void> _finishQuiz() async {
     if (quizEnded) return;
     quizEnded = true;
@@ -167,13 +166,22 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
 
     final user = FirebaseAuth.instance.currentUser;
     final prefs = await SharedPreferences.getInstance();
-    final safeScore = score < 0 ? 0 : score; // ✅ never negative
+    final safeScore = score < 0 ? 0 : score; // never negative
+    final totalTime = 180 - remainingSeconds;
+    final avgTime = questions.isNotEmpty ? totalTime / questions.length : 0.0;
 
-    await prefs.setInt('daily_score_${_todayKey}', safeScore);
-    await prefs.setInt('daily_correct_${_todayKey}', correct);
-    await prefs.setInt('daily_incorrect_${_todayKey}', incorrect);
+    await prefs.setInt('daily_score_$_todayKey', safeScore);
+    await prefs.setInt('daily_correct_$_todayKey', correct);
+    await prefs.setInt('daily_incorrect_$_todayKey', incorrect);
 
-    // 🔹 Online sync
+    // 🔹 Prepare serializable question data for Hive
+    final questionMaps = questions
+        .map(
+          (q) => {'expression': q.expression, 'correctAnswer': q.correctAnswer},
+        )
+        .toList();
+
+    // 🔹 Online sync (Firebase)
     if (user != null) {
       try {
         final uid = user.uid;
@@ -190,7 +198,6 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
             .collection('alltime_leaderboard')
             .doc(uid);
 
-        // ✅ Write to daily leaderboard
         await dailyRef.set({
           'uid': uid,
           'name': userName,
@@ -198,11 +205,12 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
           'score': safeScore,
           'correct': correct,
           'incorrect': incorrect,
-          'timeTaken': 180 - remainingSeconds,
+          'timeTaken': totalTime,
           'timestamp': FieldValue.serverTimestamp(),
+          'questions': questionMaps, // ✅ stored for reference
+          'userAnswers': userAnswers.map((k, v) => MapEntry(k.toString(), v)),
         });
 
-        // ✅ Write or update all-time leaderboard
         final allSnap = await allTimeRef.get();
         if (allSnap.exists) {
           final prev = allSnap.data()!;
@@ -213,7 +221,7 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
             'quizzesTaken': (prev['quizzesTaken'] ?? 0) + 1,
             'bestDailyScore': safeScore > (prev['bestDailyScore'] ?? 0)
                 ? safeScore
-                : (prev['bestDailyScore'] ?? 0),
+                : prev['bestDailyScore'],
             'lastUpdated': FieldValue.serverTimestamp(),
           });
         } else {
@@ -245,12 +253,6 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
         listen: false,
       );
 
-      // ✅ Add ranked session to offline logs
-      final totalTime = 180 - remainingSeconds;
-      final avgTime = (questions.isNotEmpty)
-          ? (totalTime / questions.length)
-          : 0.0;
-
       await logProvider.addSession(
         topic: 'Daily Ranked Quiz',
         category: 'Ranked',
@@ -260,6 +262,8 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
         total: questions.length,
         avgTime: avgTime,
         timeSpentSeconds: totalTime,
+        questions: questionMaps, // ✅ Added
+        userAnswers: Map<int, String>.from(userAnswers), // ✅ Added
       );
     } catch (e) {
       debugPrint("⚠️ Local provider failed: $e");
@@ -276,7 +280,7 @@ class _DailyRankedQuizScreenState extends State<DailyRankedQuizScreen>
           incorrect: incorrect,
           answers: userAnswers,
           questions: questions,
-          timeTaken: 180 - remainingSeconds,
+          timeTaken: totalTime,
         ),
       ),
     );

@@ -223,20 +223,21 @@ class _QuizScreenState extends State<QuizScreen> {
     });
   }
 
+  // 🔥 UPDATED CORE FUNCTION
   Future<void> _finishQuiz() async {
     if (!mounted) return;
     _stopwatch.stop();
     _ticker?.cancel();
 
-    final resultMap = {
-      'correct': correctCount,
-      'incorrect': incorrectCount,
-      'total': questions.length,
-      'timeText': _timerText,
-      'questions': questions,
-      'userAnswers': Map<int, String>.from(userAnswers),
-      'mode': widget.mode.toString(),
-    };
+    final total = questions.length;
+    final avgTime = total > 0 ? _stopwatch.elapsed.inSeconds / total : 0.0;
+
+    // ✅ Prepare serializable question data
+    final questionMaps = questions
+        .map(
+          (q) => {'expression': q.expression, 'correctAnswer': q.correctAnswer},
+        )
+        .toList();
 
     try {
       final logProvider = Provider.of<PracticeLogProvider>(
@@ -246,20 +247,25 @@ class _QuizScreenState extends State<QuizScreen> {
 
       await logProvider.addSession(
         topic: widget.title,
-        category: 'Practice', // 🔹 default since this is a normal quiz
+        category: widget.mode == QuizMode.dailyRanked
+            ? 'Daily Ranked'
+            : widget.mode == QuizMode.timedRanked
+            ? 'Timed Ranked'
+            : 'Practice',
         correct: correctCount,
         incorrect: incorrectCount,
-        score: correctCount, // or use a scoring formula if needed
-        total: questions.length,
-        avgTime: questions.isNotEmpty
-            ? _stopwatch.elapsed.inSeconds / questions.length
-            : 0.0,
+        score: correctCount,
+        total: total,
+        avgTime: avgTime,
         timeSpentSeconds: _stopwatch.elapsed.inSeconds,
+        questions: questionMaps, // ✅ added
+        userAnswers: Map<int, String>.from(userAnswers), // ✅ added
       );
     } catch (e) {
       debugPrint('⚠️ Failed to log session: $e');
     }
 
+    // 🧩 Save daily ranked score if needed
     if (widget.mode == QuizMode.dailyRanked) {
       try {
         final prefs = _prefs ?? await SharedPreferences.getInstance();
@@ -270,14 +276,24 @@ class _QuizScreenState extends State<QuizScreen> {
       }
     }
 
+    // 🔁 Callback (if provided)
     if (widget.onFinish != null) {
       try {
-        await widget.onFinish!(resultMap);
+        await widget.onFinish!({
+          'correct': correctCount,
+          'incorrect': incorrectCount,
+          'total': total,
+          'timeText': _timerText,
+          'questions': questions,
+          'userAnswers': Map<int, String>.from(userAnswers),
+          'mode': widget.mode.toString(),
+        });
       } catch (e) {
         debugPrint('⚠️ onFinish callback threw: $e');
       }
     }
 
+    // 🎯 Navigate to result screen
     if (context.mounted) {
       Navigator.pushReplacement(
         context,
@@ -286,7 +302,7 @@ class _QuizScreenState extends State<QuizScreen> {
             title: widget.title,
             correct: correctCount,
             incorrect: incorrectCount,
-            total: questions.length,
+            total: total,
             time: _timerText,
             questions: questions,
             userAnswers: Map<int, String>.from(userAnswers),

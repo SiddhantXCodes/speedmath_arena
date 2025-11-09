@@ -26,13 +26,17 @@ class PracticeLogAdapter extends TypeAdapter<PracticeLog> {
       total: fields[6] as int,
       avgTime: fields[7] as double,
       timeSpentSeconds: fields[8] as int,
+      questions: (fields[9] as List)
+          .map((dynamic e) => (e as Map).cast<String, dynamic>())
+          .toList(),
+      userAnswers: (fields[10] as Map).cast<int, String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, PracticeLog obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.date)
       ..writeByte(1)
@@ -50,7 +54,11 @@ class PracticeLogAdapter extends TypeAdapter<PracticeLog> {
       ..writeByte(7)
       ..write(obj.avgTime)
       ..writeByte(8)
-      ..write(obj.timeSpentSeconds);
+      ..write(obj.timeSpentSeconds)
+      ..writeByte(9)
+      ..write(obj.questions)
+      ..writeByte(10)
+      ..write(obj.userAnswers);
   }
 
   @override

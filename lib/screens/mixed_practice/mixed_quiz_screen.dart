@@ -185,6 +185,7 @@ class _MixedQuizScreenState extends State<MixedQuizScreen> {
     });
   }
 
+  // ✅ UPDATED to include full question and answer data
   Future<void> _finishQuiz() async {
     if (quizEnded) return;
     quizEnded = true;
@@ -193,21 +194,36 @@ class _MixedQuizScreenState extends State<MixedQuizScreen> {
 
     final total = questions.length;
     final score = (correctCount * 4) - incorrectCount;
+    final avgTime = total > 0 ? _stopwatch.elapsed.inSeconds / total : 0.0;
 
-    final logProvider = Provider.of<PracticeLogProvider>(
-      context,
-      listen: false,
-    );
-    await logProvider.addSession(
-      topic: widget.topics.join(", "),
-      category: 'Mixed Practice',
-      correct: correctCount,
-      incorrect: incorrectCount,
-      score: score,
-      total: total,
-      avgTime: total > 0 ? _stopwatch.elapsed.inSeconds / total : 0.0,
-      timeSpentSeconds: _stopwatch.elapsed.inSeconds,
-    );
+    // 🔹 Convert to simple map list for Hive
+    final questionMaps = questions
+        .map(
+          (q) => {'expression': q.expression, 'correctAnswer': q.correctAnswer},
+        )
+        .toList();
+
+    try {
+      final logProvider = Provider.of<PracticeLogProvider>(
+        context,
+        listen: false,
+      );
+
+      await logProvider.addSession(
+        topic: widget.topics.join(", "),
+        category: 'Mixed Practice',
+        correct: correctCount,
+        incorrect: incorrectCount,
+        score: score,
+        total: total,
+        avgTime: avgTime,
+        timeSpentSeconds: _stopwatch.elapsed.inSeconds,
+        questions: questionMaps, // ✅ Added
+        userAnswers: Map<int, String>.from(userAnswers), // ✅ Added
+      );
+    } catch (e) {
+      debugPrint("⚠️ Failed to log mixed session: $e");
+    }
 
     if (!mounted) return;
 
@@ -218,7 +234,7 @@ class _MixedQuizScreenState extends State<MixedQuizScreen> {
           title: 'Mixed Practice',
           correct: correctCount,
           incorrect: incorrectCount,
-          total: questions.length,
+          total: total,
           time: _timerText,
           questions: questions,
           userAnswers: Map<int, String>.from(userAnswers),

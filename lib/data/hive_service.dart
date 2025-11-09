@@ -1,4 +1,4 @@
-// lib/data/hive_service.dart
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'models/practice_log.dart';
 import 'models/question_history.dart';
@@ -8,192 +8,227 @@ import 'models/user_profile.dart';
 import 'models/daily_quiz_meta.dart';
 import 'models/daily_score.dart';
 
-/// Centralized Hive helper used throughout the app.
-/// - All box names are defined here for consistency.
-/// - Date keys are normalized as yyyy-MM-dd strings.
+/// 💾 Centralized Hive helper with safe async access.
+/// Automatically re-opens any closed boxes.
 class HiveService {
-  // Box names (single source of truth)
-  static const String _practiceBoxName = 'practice_logs';
-  static const String _historyBoxName = 'question_history';
-  static const String _streakBoxName = 'streak_data';
-  static const String _settingsBoxName = 'settings';
-  static const String _userBoxName = 'user_profile';
-  static const String _dailyQuizBoxName = 'daily_quiz_meta';
-  static const String _activityBoxName = 'activity_data';
-  static const String _statsBoxName = 'stats_cache';
-  static const String _dailyScoreBoxName = 'daily_scores';
+  // Box names
+  static const _practiceBox = 'practice_logs';
+  static const _historyBox = 'question_history';
+  static const _streakBox = 'streak_data';
+  static const _settingsBox = 'settings';
+  static const _userBox = 'user_profile';
+  static const _dailyQuizBox = 'daily_quiz_meta';
+  static const _activityBox = 'activity_data';
+  static const _statsBox = 'stats_cache';
+  static const _dailyScoreBox = 'daily_scores';
 
-  // Helpers to access boxes (assumes opened in main.dart)
-  static Box<PracticeLog> get _practiceBox =>
-      Hive.box<PracticeLog>(_practiceBoxName);
-  static Box<QuestionHistory> get _historyBox =>
-      Hive.box<QuestionHistory>(_historyBoxName);
-  static Box<StreakData> get _streakBox => Hive.box<StreakData>(_streakBoxName);
-  static Box<UserSettings> get _settingsBox =>
-      Hive.box<UserSettings>(_settingsBoxName);
-  static Box<UserProfile> get _userBox => Hive.box<UserProfile>(_userBoxName);
-  static Box<DailyQuizMeta> get _dailyQuizBox =>
-      Hive.box<DailyQuizMeta>(_dailyQuizBoxName);
-  static Box<Map> get _activityBox => Hive.box<Map>(_activityBoxName);
-  static Box<Map> get _statsBox => Hive.box<Map>(_statsBoxName);
-  static Box<DailyScore> get _dailyScoreBox =>
-      Hive.box<DailyScore>(_dailyScoreBoxName);
+  // Helper: safely open box (auto opens if missing)
+  static Future<Box<T>> _safeBox<T>(String name) async {
+    if (!Hive.isBoxOpen(name)) {
+      try {
+        return await Hive.openBox<T>(name);
+      } catch (e) {
+        debugPrint('⚠️ HiveService: Failed to open box $name — $e');
+        rethrow;
+      }
+    }
+    return Hive.box<T>(name);
+  }
 
-  // -------------------------
-  // Date key formatting
-  // -------------------------
   static String _dateKey(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  // -------------------------
-  // Practice Log (per session)
-  // -------------------------
+  // ---------------------------------------------------------------------------
+  // 🧩 PRACTICE LOGS
+  // ---------------------------------------------------------------------------
   static Future<void> addPracticeLog(PracticeLog log) async {
-    await _practiceBox.add(log);
-    // Update daily heatmap activity
+    final box = await _safeBox<PracticeLog>(_practiceBox);
+    await box.add(log);
     _incrementActivityForDate(log.date, 1);
     _recomputeStatsCache();
   }
 
-  static List<PracticeLog> getPracticeLogs() => _practiceBox.values.toList();
+  static List<PracticeLog> getPracticeLogs() {
+    if (!Hive.isBoxOpen(_practiceBox)) return [];
+    return Hive.box<PracticeLog>(_practiceBox).values.toList();
+  }
 
-  /// 🧹 Remove all practice logs for a specific date (used in streak toggle)
   static Future<void> removePracticeLogsForDate(DateTime date) async {
-    final dateKey = DateTime(date.year, date.month, date.day);
+    final box = await _safeBox<PracticeLog>(_practiceBox);
     final toDelete = <dynamic>[];
 
-    for (final key in _practiceBox.keys) {
-      final PracticeLog? log = _practiceBox.get(key);
+    for (final key in box.keys) {
+      final PracticeLog? log = box.get(key);
       if (log == null) continue;
       final logDate = DateTime(log.date.year, log.date.month, log.date.day);
-      if (logDate == dateKey) {
+      if (logDate == DateTime(date.year, date.month, date.day))
         toDelete.add(key);
-      }
     }
 
     for (final k in toDelete) {
-      await _practiceBox.delete(k);
+      await box.delete(k);
     }
 
-    // Refresh aggregates after removal
     _recomputeStatsCache();
     await _rebuildActivityMap();
   }
 
   static Future<void> clearPracticeLogs() async {
-    await _practiceBox.clear();
-    await _activityBox.delete('activity');
-    await _statsBox.delete('stats');
-  }
+    final box = await _safeBox<PracticeLog>(_practiceBox);
+    await box.clear();
 
-  // -------------------------
-  // Question History (per question)
-  // -------------------------
-  static Future<void> addQuestion(QuestionHistory q) async {
-    await _historyBox.add(q);
-    if (!q.isCorrect) {
-      _recomputeStatsCache();
+    if (Hive.isBoxOpen(_activityBox)) {
+      final a = Hive.box<Map>(_activityBox);
+      await a.delete('activity');
+    }
+
+    if (Hive.isBoxOpen(_statsBox)) {
+      final s = Hive.box<Map>(_statsBox);
+      await s.delete('stats');
     }
   }
 
-  static List<QuestionHistory> getHistory() => _historyBox.values.toList();
+  // ---------------------------------------------------------------------------
+  // 🧮 QUESTION HISTORY
+  // ---------------------------------------------------------------------------
+  static Future<void> addQuestion(QuestionHistory q) async {
+    final box = await _safeBox<QuestionHistory>(_historyBox);
+    await box.add(q);
+    if (!q.isCorrect) _recomputeStatsCache();
+  }
 
-  static Future<void> clearQuestionHistory() async => _historyBox.clear();
+  static List<QuestionHistory> getHistory() {
+    if (!Hive.isBoxOpen(_historyBox)) return [];
+    return Hive.box<QuestionHistory>(_historyBox).values.toList();
+  }
 
-  // -------------------------
-  // Streak
-  // -------------------------
+  static Future<void> clearQuestionHistory() async {
+    final box = await _safeBox<QuestionHistory>(_historyBox);
+    await box.clear();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 🔥 STREAK
+  // ---------------------------------------------------------------------------
   static Future<void> saveStreak(StreakData data) async {
-    await _streakBox.put('streak', data);
+    final box = await _safeBox<StreakData>(_streakBox);
+    await box.put('streak', data);
   }
 
-  static StreakData? getStreak() => _streakBox.get('streak');
+  static StreakData? getStreak() {
+    if (!Hive.isBoxOpen(_streakBox)) return null;
+    return Hive.box<StreakData>(_streakBox).get('streak');
+  }
 
-  static Future<void> clearStreak() async => _streakBox.clear();
+  static Future<void> clearStreak() async {
+    final box = await _safeBox<StreakData>(_streakBox);
+    await box.clear();
+  }
 
-  // -------------------------
-  // User settings
-  // -------------------------
-  static Future<void> saveSettings(UserSettings s) async =>
-      _settingsBox.put('settings', s);
-  static UserSettings? getSettings() => _settingsBox.get('settings');
-  static Future<void> clearSettings() async => _settingsBox.clear();
+  // ---------------------------------------------------------------------------
+  // ⚙️ SETTINGS
+  // ---------------------------------------------------------------------------
+  static Future<void> saveSettings(UserSettings s) async {
+    final box = await _safeBox<UserSettings>(_settingsBox);
+    await box.put('settings', s);
+  }
 
-  // -------------------------
-  // User profile (cached from Firebase)
-  // -------------------------
-  static Future<void> saveUser(UserProfile u) async =>
-      await _userBox.put(u.uid, u);
-  static UserProfile? getUser(String uid) => _userBox.get(uid);
-  static Future<void> clearUser(String uid) async => await _userBox.delete(uid);
+  static UserSettings? getSettings() {
+    if (!Hive.isBoxOpen(_settingsBox)) return null;
+    return Hive.box<UserSettings>(_settingsBox).get('settings');
+  }
 
-  // -------------------------
-  // Daily Quiz Meta (cached per-date)
-  // -------------------------
+  static Future<void> clearSettings() async {
+    final box = await _safeBox<UserSettings>(_settingsBox);
+    await box.clear();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 👤 USER PROFILE
+  // ---------------------------------------------------------------------------
+  static Future<void> saveUser(UserProfile u) async {
+    final box = await _safeBox<UserProfile>(_userBox);
+    await box.put(u.uid, u);
+  }
+
+  static UserProfile? getUser(String uid) {
+    if (!Hive.isBoxOpen(_userBox)) return null;
+    return Hive.box<UserProfile>(_userBox).get(uid);
+  }
+
+  static Future<void> clearUser(String uid) async {
+    final box = await _safeBox<UserProfile>(_userBox);
+    await box.delete(uid);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 🗓️ DAILY QUIZ META
+  // ---------------------------------------------------------------------------
   static Future<void> saveDailyQuizMeta(DailyQuizMeta meta) async {
-    await _dailyQuizBox.put(meta.date, meta);
+    final box = await _safeBox<DailyQuizMeta>(_dailyQuizBox);
+    await box.put(meta.date, meta);
   }
 
-  static DailyQuizMeta? getDailyQuizMeta(String dateKey) =>
-      _dailyQuizBox.get(dateKey);
+  static DailyQuizMeta? getDailyQuizMeta(String dateKey) {
+    if (!Hive.isBoxOpen(_dailyQuizBox)) return null;
+    return Hive.box<DailyQuizMeta>(_dailyQuizBox).get(dateKey);
+  }
 
-  // -------------------------
-  // Activity map (heatmap aggregation)
-  // stored as Map<String(DateKey) -> int(count)>
-  // -------------------------
-  static void _incrementActivityForDate(DateTime d, int by) {
+  // ---------------------------------------------------------------------------
+  // 🔥 ACTIVITY MAP
+  // ---------------------------------------------------------------------------
+  static Future<void> _incrementActivityForDate(DateTime d, int by) async {
+    final box = await _safeBox<Map>(_activityBox);
     const key = 'activity';
-    final Map? raw = _activityBox.get(key);
+    final Map? raw = box.get(key);
     final Map<String, dynamic> activity = raw != null
         ? Map<String, dynamic>.from(raw)
         : {};
     final dateKey = _dateKey(d);
     final int existing = (activity[dateKey] ?? 0) as int;
     activity[dateKey] = existing + by;
-    _activityBox.put(key, activity);
+    await box.put(key, activity);
   }
 
   static Future<void> _rebuildActivityMap() async {
+    final logs = getPracticeLogs();
+    final box = await _safeBox<Map>(_activityBox);
     final Map<String, int> rebuilt = {};
-    for (final log in getPracticeLogs()) {
+    for (final log in logs) {
       final key = _dateKey(log.date);
       rebuilt[key] = (rebuilt[key] ?? 0) + 1;
     }
-    await _activityBox.put('activity', rebuilt);
+    await box.put('activity', rebuilt);
   }
 
   static Map<DateTime, int> getActivityMap() {
-    final Map? raw = _activityBox.get('activity');
+    if (!Hive.isBoxOpen(_activityBox)) return {};
+    final box = Hive.box<Map>(_activityBox);
+    final Map? raw = box.get('activity');
     if (raw == null) return {};
     final Map<String, dynamic> m = Map<String, dynamic>.from(raw);
     final Map<DateTime, int> out = {};
     m.forEach((k, v) {
       try {
-        final parts = k.split('-');
-        final dt = DateTime(
-          int.parse(parts[0]),
-          int.parse(parts[1]),
-          int.parse(parts[2]),
-        );
-        out[dt] = (v as num).toInt();
+        final p = k.split('-');
+        out[DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]))] =
+            (v as num).toInt();
       } catch (_) {}
     });
     return out;
   }
 
-  static Future<void> saveActivityMap(Map<String, dynamic> activityMap) async {
-    await _activityBox.put('activity', activityMap);
-  }
-
-  // -------------------------
-  // Stats cache (quick derived metrics)
-  // -------------------------
-  static void _recomputeStatsCache() {
+  // ---------------------------------------------------------------------------
+  // 📊 STATS CACHE
+  // ---------------------------------------------------------------------------
+  static Future<void> _recomputeStatsCache() async {
     final logs = getPracticeLogs();
+    final box = await _safeBox<Map>(_statsBox);
+
     int sessions = logs.length;
     int totalCorrect = 0;
     int totalIncorrect = 0;
-    double totalTime = 0.0;
+    double totalTime = 0;
 
     for (final l in logs) {
       totalCorrect += l.correct;
@@ -205,63 +240,62 @@ class HiveService {
       'sessions': sessions,
       'totalCorrect': totalCorrect,
       'totalIncorrect': totalIncorrect,
-      'avgTime': sessions > 0 ? (totalTime / sessions) : 0.0,
+      'avgTime': sessions > 0 ? totalTime / sessions : 0.0,
     };
 
-    _statsBox.put('stats', stats);
+    await box.put('stats', stats);
   }
 
   static Map<String, dynamic>? getStats() {
-    final raw = _statsBox.get('stats');
+    if (!Hive.isBoxOpen(_statsBox)) return null;
+    final box = Hive.box<Map>(_statsBox);
+    final raw = box.get('stats');
     if (raw == null) return null;
     return Map<String, dynamic>.from(raw);
   }
 
-  static Future<void> saveStats(Map<String, dynamic> stats) async =>
-      await _statsBox.put('stats', stats);
-
-  // -------------------------
-  // Daily ranked scores (cached locally too)
-  // -------------------------
+  // ---------------------------------------------------------------------------
+  // 🏆 DAILY SCORE
+  // ---------------------------------------------------------------------------
   static Future<void> saveDailyScore(DailyScore score) async {
+    final box = await _safeBox<DailyScore>(_dailyScoreBox);
     final key = _dateKey(score.date);
-    await _dailyScoreBox.put(key, score);
+    await box.put(key, score);
   }
 
   static DailyScore? getDailyScore(DateTime date) {
+    if (!Hive.isBoxOpen(_dailyScoreBox)) return null;
+    final box = Hive.box<DailyScore>(_dailyScoreBox);
     final key = _dateKey(date);
-    return _dailyScoreBox.get(key);
+    return box.get(key);
   }
 
-  static List<DailyScore> getAllDailyScores() => _dailyScoreBox.values.toList();
-
-  static Future<void> clearDailyScores() async => await _dailyScoreBox.clear();
-
-  // -------------------------
-  // Debug / QA helpers
-  // -------------------------
-  static void dumpPracticeLogs() {
-    final logs = getPracticeLogs();
-    for (var l in logs) {
-      print(
-        'PracticeLog - ${l.date.toIso8601String()} | ${l.category} | c:${l.correct} i:${l.incorrect} t:${l.avgTime}',
-      );
-    }
+  static List<DailyScore> getAllDailyScores() {
+    if (!Hive.isBoxOpen(_dailyScoreBox)) return [];
+    return Hive.box<DailyScore>(_dailyScoreBox).values.toList();
   }
 
+  static Future<void> clearDailyScores() async {
+    final box = await _safeBox<DailyScore>(_dailyScoreBox);
+    await box.clear();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 🧹 CLEAR ALL
+  // ---------------------------------------------------------------------------
   static Future<void> clearAllOfflineData() async {
     await clearPracticeLogs();
     await clearQuestionHistory();
     await clearStreak();
     await clearSettings();
-    await _dailyQuizBox.clear();
-    await _activityBox.clear();
-    await _statsBox.clear();
+    final dq = await _safeBox<DailyQuizMeta>(_dailyQuizBox);
+    await dq.clear();
+    final act = await _safeBox<Map>(_activityBox);
+    await act.clear();
+    final stats = await _safeBox<Map>(_statsBox);
+    await stats.clear();
     await clearDailyScores();
   }
 
-  // -------------------------
-  // Extra safe helpers
-  // -------------------------
   static bool isBoxOpen(String name) => Hive.isBoxOpen(name);
 }
