@@ -60,6 +60,9 @@ class _TopBarState extends State<TopBar> {
     return AppBar(
       backgroundColor: theme.appBarTheme.backgroundColor ?? Colors.transparent,
       elevation: 0,
+      centerTitle: false, // ✅ stays left-aligned
+      leadingWidth: 0, // ✅ no leading space shifting
+      titleSpacing: 16, // ✅ consistent padding from left edge
       title: Text(
         'SpeedMath Pro',
         style: TextStyle(fontWeight: FontWeight.bold, color: textColor),

@@ -8,6 +8,7 @@ import 'presentation/theme/app_theme.dart';
 import 'features/home/presentation/screens/home_screen.dart'; // ✅ moved home to features
 import './core/sync/sync_manager.dart'; // ✅ for future global sync
 import './core/firebase/firebase_options.dart'; // optional future use
+import 'features/auth/presentation/providers/auth_provider.dart';
 
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
@@ -20,6 +21,7 @@ class SpeedMathApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
         // 🌗 Global Theme
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
 
