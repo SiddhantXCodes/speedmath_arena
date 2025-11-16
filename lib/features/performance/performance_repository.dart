@@ -8,8 +8,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/hive_service.dart';
 import '../../models/daily_score.dart';
 
-/// 📊 PerformanceRepository — handles all ranked & practice score logic
-/// Production uses real Firebase, but tests inject mocks.
+/// 📊 PerformanceRepository — now simplified for new quiz logic:
+/// - Score-only storage
+/// - Supports ranked (Firebase) + practice (Hive)
+/// - No incorrect/total/avgTime fields
 class PerformanceRepository {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
@@ -22,21 +24,19 @@ class PerformanceRepository {
       _firestore = FirebaseFirestore.instance;
 
   // --------------------------------------------------------------------------
-  // 🧪 TEST CONSTRUCTOR (Mocks)
+  // 🧪 TEST CONSTRUCTOR
   // --------------------------------------------------------------------------
   PerformanceRepository.test(FirebaseAuth mockAuth, FirebaseFirestore mockStore)
     : _auth = mockAuth,
       _firestore = mockStore;
 
   // --------------------------------------------------------------------------
-  // 🧠 Leaderboard Header
+  // 🧠 Leaderboard Header Summary
   // --------------------------------------------------------------------------
   Future<Map<String, dynamic>> fetchLeaderboardHeader() async {
     final user = _auth.currentUser;
-    if (user == null) {
-      log("⚠️ No logged-in user, returning empty leaderboard");
-      return {};
-    }
+
+    if (user == null) return {};
 
     final uid = user.uid;
     final todayKey =
@@ -49,7 +49,7 @@ class PerformanceRepository {
     int? totalUsers;
 
     try {
-      // 🟦 Fetch today's leaderboard
+      // ---------------- TODAY'S LEADERBOARD ----------------
       final dailySnap = await _firestore
           .collection('daily_leaderboard')
           .doc(todayKey)
@@ -67,7 +67,7 @@ class PerformanceRepository {
         rank++;
       }
 
-      // 🟩 All-time leaderboard
+      // ---------------- ALL TIME LEADERBOARD ----------------
       final allSnap = await _firestore
           .collection('alltime_leaderboard')
           .orderBy('totalScore', descending: true)
@@ -81,10 +81,8 @@ class PerformanceRepository {
           allTimeRank = rank;
 
           final data = doc.data();
-          bestScore =
-              (data['bestDailyScore'] ?? data['bestScore'] ?? 0) as int?;
-          totalScore = (data['totalScore'] ?? 0) as int?;
-
+          bestScore = data['bestDailyScore'] ?? 0;
+          totalScore = data['totalScore'] ?? 0;
           break;
         }
         rank++;
@@ -123,7 +121,7 @@ class PerformanceRepository {
   }
 
   // --------------------------------------------------------------------------
-  // 📈 Ranked Quiz Trend
+  // 📈 Ranked Quiz Trend (offline cached)
   // --------------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> fetchRankedQuizTrend() async {
     try {
@@ -131,7 +129,9 @@ class PerformanceRepository {
 
       if (localScores.isEmpty) return [];
 
+      // Sort newest → oldest
       localScores.sort((a, b) => b.date.compareTo(a.date));
+
       final recent = localScores.take(7).toList().reversed.toList();
 
       return recent
@@ -150,7 +150,7 @@ class PerformanceRepository {
   }
 
   // --------------------------------------------------------------------------
-  // 💾 Save DailyScore
+  // 💾 Save DailyScore (used for both ranked & practice)
   // --------------------------------------------------------------------------
   Future<void> saveDailyScore(DailyScore score) async {
     try {
@@ -161,7 +161,7 @@ class PerformanceRepository {
   }
 
   // --------------------------------------------------------------------------
-  // ☁️ Sync local DailyScores → Firebase
+  // ☁️ Sync local ranked scores → Firebase
   // --------------------------------------------------------------------------
   Future<void> syncLocalScoresToFirebase() async {
     final user = _auth.currentUser;
@@ -171,7 +171,7 @@ class PerformanceRepository {
       final scores = HiveService.getAllDailyScores();
 
       for (final score in scores) {
-        if (!score.isRanked) continue;
+        if (!score.isRanked) continue; // sync only ranked
 
         final dateKey =
             "${score.date.year}-${score.date.month.toString().padLeft(2, '0')}-${score.date.day.toString().padLeft(2, '0')}";
@@ -183,10 +183,8 @@ class PerformanceRepository {
             .doc(user.uid)
             .set({
               'uid': user.uid,
-              'email': user.email,
               'score': score.score,
-              'totalQuestions': score.totalQuestions,
-              'timeTakenSeconds': score.timeTakenSeconds,
+              'timeTaken': score.timeTakenSeconds,
               'timestamp': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
       }
@@ -222,7 +220,6 @@ class PerformanceRepository {
         return {
           'date': (d['date'] as Timestamp?)?.toDate(),
           'score': d['score'] ?? 0,
-          'totalQuestions': d['totalQuestions'] ?? 0,
           'timeTakenSeconds': d['timeTakenSeconds'] ?? 0,
         };
       }).toList();
@@ -233,7 +230,7 @@ class PerformanceRepository {
   }
 
   // --------------------------------------------------------------------------
-  // 🧹 Clear local Performance data
+  // 🧹 Clear all local performance data
   // --------------------------------------------------------------------------
   Future<void> clearAllLocalData() async {
     try {

@@ -21,7 +21,7 @@ class DailyRankedQuizEntry extends StatelessWidget {
             max: 50,
             count: 10,
             mode: QuizMode.dailyRanked,
-            timeLimitSeconds: 180,
+            timeLimitSeconds: 150,
 
             onFinish: (result) async {
               await Future.delayed(const Duration(milliseconds: 300));

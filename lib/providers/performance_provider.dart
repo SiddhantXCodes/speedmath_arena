@@ -20,7 +20,6 @@ class PerformanceProvider extends ChangeNotifier {
   // --------------------------------------------------------------------------
   PerformanceProvider.test(PerformanceRepository mockRepo) {
     _repository = mockRepo;
-    // Prevent async Firebase calls in tests
     initialized = true;
     notifyListeners();
   }
@@ -28,7 +27,7 @@ class PerformanceProvider extends ChangeNotifier {
   // --------------------------------------------------------------------------
   // State
   // --------------------------------------------------------------------------
-  Map<DateTime, int> _dailyScores = {};
+  Map<DateTime, int> _dailyScores = {}; // date → score
   Map<String, dynamic>? _leaderboardData;
 
   bool initialized = false;
@@ -48,28 +47,31 @@ class PerformanceProvider extends ChangeNotifier {
   bool get isLoadingLeaderboard => _isLoadingLeaderboard;
   bool get loading => !initialized;
 
-  int get currentStreak => _currentStreak;
+  int get currentStreak => _currentStreak; // Ranked only
   int? get todayRank => _todayRank;
   int? get allTimeRank => _allTimeRank;
   int? get bestScore => _bestScore;
 
+  // Weekly average of scores
   int get weeklyAverage {
     if (_dailyScores.isEmpty) return 0;
 
     final now = DateTime.now();
 
-    final last7 = List.generate(7, (i) {
-      final d = now.subtract(Duration(days: i));
+    final last7days = List.generate(7, (index) {
+      final d = now.subtract(Duration(days: index));
       return DateTime(d.year, d.month, d.day);
     });
 
-    final used = last7
+    final used = last7days
         .map((d) => _dailyScores[d] ?? 0)
-        .where((v) => v > 0)
+        .where((score) => score > 0)
         .toList();
 
     if (used.isEmpty) return 0;
-    return (used.reduce((a, b) => a + b) / used.length).round();
+
+    final avg = used.reduce((a, b) => a + b) / used.length;
+    return avg.round();
   }
 
   // --------------------------------------------------------------------------
@@ -82,10 +84,11 @@ class PerformanceProvider extends ChangeNotifier {
   }
 
   // --------------------------------------------------------------------------
-  // Load local cached daily trend ONLY
+  // Load local daily scores only (offline practice + ranked cache)
   // --------------------------------------------------------------------------
   Future<void> loadFromLocal({bool force = false}) async {
     try {
+      // Fetch new "score-only" trend data
       final items = await _repository.fetchRankedQuizTrend();
 
       _dailyScores = {
@@ -100,7 +103,7 @@ class PerformanceProvider extends ChangeNotifier {
   }
 
   // --------------------------------------------------------------------------
-  // Leaderboard (Firebase)
+  // Leaderboard summary from Firebase (today rank, best score, streak, etc.)
   // --------------------------------------------------------------------------
   Future<void> fetchLeaderboardHeader() async {
     if (_isLoadingLeaderboard) return;
@@ -124,7 +127,7 @@ class PerformanceProvider extends ChangeNotifier {
   }
 
   // --------------------------------------------------------------------------
-  // Online attempts
+  // Fetch list of online attempts (ranked attempts)
   // --------------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> fetchOnlineAttempts({
     int limit = 200,
@@ -137,7 +140,7 @@ class PerformanceProvider extends ChangeNotifier {
   }
 
   // --------------------------------------------------------------------------
-  // Reload both local + online data
+  // Reload both offline + online data
   // --------------------------------------------------------------------------
   Future<void> reloadAll() async {
     try {
@@ -150,7 +153,7 @@ class PerformanceProvider extends ChangeNotifier {
   }
 
   // --------------------------------------------------------------------------
-  // Reset
+  // Reset (clear local)
   // --------------------------------------------------------------------------
   Future<void> resetAll() async {
     _dailyScores.clear();
@@ -171,7 +174,7 @@ class PerformanceProvider extends ChangeNotifier {
   }
 
   // --------------------------------------------------------------------------
-  // Test helper (for manual initialization in tests)
+  // ✔ TEST SUPPORT
   // --------------------------------------------------------------------------
   void testMarkInitialized() {
     initialized = true;

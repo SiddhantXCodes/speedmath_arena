@@ -3,8 +3,13 @@ import 'package:hive/hive.dart';
 
 part 'daily_score.g.dart';
 
-/// 📊 DailyScore — stores a user's daily quiz performance (offline + online)
-/// Used for both Hive (offline caching) and Firebase sync.
+/// 📊 DailyScore — universal model for score storage.
+/// Works for:
+/// - Practice Quiz
+/// - Ranked Quiz
+/// - Mixed Practice
+///
+/// Used in Hive ONLY (not tied to Firebase now).
 @HiveType(typeId: 6)
 class DailyScore extends HiveObject {
   @HiveField(0)
@@ -20,18 +25,24 @@ class DailyScore extends HiveObject {
   final int timeTakenSeconds;
 
   @HiveField(4)
-  final bool isRanked; // true = daily ranked quiz, false = practice quiz
+  final bool isRanked;
+
+  /// 🆕 Strong recommendation: store quiz type
+  /// practice | ranked | mixed
+  @HiveField(5)
+  final String quizType;
 
   DailyScore({
     required this.date,
     required this.score,
     this.totalQuestions = 0,
     this.timeTakenSeconds = 0,
-    this.isRanked = true,
+    this.isRanked = false,
+    this.quizType = "practice",
   });
 
   // ----------------------------------------------------------
-  // 🔁 Convert model → Map (for Firebase/Hive storage)
+  // 🔁 Convert model → Map
   // ----------------------------------------------------------
   Map<String, dynamic> toMap() => {
     'date': date.toIso8601String(),
@@ -39,21 +50,22 @@ class DailyScore extends HiveObject {
     'totalQuestions': totalQuestions,
     'timeTakenSeconds': timeTakenSeconds,
     'isRanked': isRanked,
+    'quizType': quizType,
   };
 
   // ----------------------------------------------------------
-  // 🧩 Convert Map → model (safe backward-compatible parsing)
+  // 🧩 Convert Map → model (safe & backward compatible)
   // ----------------------------------------------------------
   factory DailyScore.fromMap(Map<String, dynamic> map) {
-    dynamic rawScore = map['score'];
-    dynamic rawTotal = map['totalQuestions'];
-    dynamic rawTime = map['timeTakenSeconds'];
-    dynamic rawRanked = map['isRanked'];
+    final rawScore = map['score'];
+    final rawTotal = map['totalQuestions'];
+    final rawTime = map['timeTakenSeconds'];
+    final rawRanked = map['isRanked'];
+    final rawType = map['quizType'];
 
     return DailyScore(
       date: DateTime.tryParse(map['date']?.toString() ?? '') ?? DateTime.now(),
 
-      // ✅ Safely convert mixed or null values to int
       score: (rawScore is num)
           ? rawScore.toInt()
           : int.tryParse(rawScore?.toString() ?? '0') ?? 0,
@@ -66,19 +78,28 @@ class DailyScore extends HiveObject {
           ? rawTime.toInt()
           : int.tryParse(rawTime?.toString() ?? '0') ?? 0,
 
-      // ✅ Safely convert any value to bool (fallback = true)
       isRanked: (rawRanked is bool)
           ? rawRanked
           : (rawRanked?.toString().toLowerCase() == 'true'),
+
+      // ⭐ Backward compatibility: if no quizType → decide automatically
+      quizType:
+          rawType?.toString() ?? ((rawRanked == true) ? "ranked" : "practice"),
     );
   }
 
   // ----------------------------------------------------------
-  // 🧾 For quick debug prints
+  // 🧾 Debug print
   // ----------------------------------------------------------
   @override
   String toString() {
-    return 'DailyScore(date: $date, score: $score, total: $totalQuestions, '
-        'time: $timeTakenSeconds, ranked: $isRanked)';
+    return 'DailyScore('
+        'date: $date, '
+        'score: $score, '
+        'total: $totalQuestions, '
+        'time: $timeTakenSeconds, '
+        'ranked: $isRanked, '
+        'type: $quizType'
+        ')';
   }
 }

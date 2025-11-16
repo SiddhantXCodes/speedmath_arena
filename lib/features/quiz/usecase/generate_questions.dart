@@ -1,4 +1,3 @@
-//lib/features/quiz/usecase/generate_questions.dart
 import 'dart:math' as math;
 
 class Question {
@@ -11,7 +10,81 @@ class Question {
 class QuestionGenerator {
   static final _rnd = math.Random();
 
-  /// Central entry point: generates question list for any topic
+  // ---------------------------------------------------------------------------
+  // 🔥 NEW — MIXED PRACTICE MULTI-TOPIC GENERATOR
+  // ---------------------------------------------------------------------------
+  static Question randomFromTopics(List<String> topics, int min, int max) {
+    // Convert human readable → generator keys
+    final mapped = topics.map(_normalizeTopic).toList();
+    final chosen = mapped[_rnd.nextInt(mapped.length)];
+    return generate(chosen, min, max, 1).first;
+  }
+
+  static String _normalizeTopic(String t) {
+    t = t.toLowerCase().trim();
+
+    switch (t) {
+      case "addition":
+        return "addition";
+      case "subtraction":
+        return "subtraction";
+      case "multiplication":
+        return "multiplication";
+      case "division":
+        return "division";
+      case "squares":
+      case "square":
+        return "square";
+      case "cubes":
+      case "cube":
+        return "cube";
+      case "square root":
+      case "sqrt":
+        return "square root";
+      case "cube root":
+      case "cbrt":
+        return "cube root";
+      case "percentage":
+        return "percentage";
+      case "average":
+        return "average";
+      default:
+        return "addition"; // fallback safety
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 🔥 Generate ONE random question (used everywhere)
+  // ---------------------------------------------------------------------------
+  static Question random({String topic = 'mixed', int min = 1, int max = 20}) {
+    topic = topic.toLowerCase().trim();
+
+    switch (topic) {
+      case 'addition':
+      case 'subtraction':
+      case 'multiplication':
+      case 'division':
+      case 'percentage':
+      case 'average':
+      case 'square':
+      case 'cube':
+      case 'square root':
+      case 'cube root':
+      case 'tables':
+      case 'trigonometry':
+      case 'data interpretation':
+        return generate(topic, min, max, 1).first;
+
+      case 'mixed':
+      case 'mixed questions':
+      default:
+        return generate('mixed questions', min, max, 1).first;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // OLD bulk generator (kept as fallback)
+  // ---------------------------------------------------------------------------
   static List<Question> generate(String topic, int min, int max, int count) {
     if (min > max) {
       final t = min;
@@ -20,41 +93,58 @@ class QuestionGenerator {
     }
 
     topic = topic.toLowerCase();
+
     switch (topic) {
       case 'addition':
         return _basic(op: '+', min: min, max: max, count: count);
+
       case 'subtraction':
         return _basic(op: '-', min: min, max: max, count: count);
+
       case 'multiplication':
         return _basic(op: '×', min: min, max: max, count: count);
+
       case 'division':
         return _basic(op: '÷', min: min, max: max, count: count);
+
       case 'percentage':
         return _percentage(min, max, count);
+
       case 'average':
         return _average(min, max, count);
+
       case 'square':
         return _square(min, max, count);
+
       case 'cube':
         return _cube(min, max, count);
+
       case 'square root':
         return _squareRoot(min, max, count);
+
       case 'cube root':
         return _cubeRoot(min, max, count);
+
       case 'trigonometry':
         return _trigonometry(count);
+
       case 'tables':
         return _tables(min, max, count);
+
       case 'data interpretation':
         return _dataInterpretation(min, max, count);
+
       case 'mixed questions':
         return _mixed(min, max, count);
+
       default:
         return _basic(op: '+', min: min, max: max, count: count);
     }
   }
 
-  // ---------- Helpers ----------
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
   static int _randInt(int min, int max) => min + _rnd.nextInt(max - min + 1);
 
   static T _choice<T>(List<T> list) => list[_rnd.nextInt(list.length)];
@@ -66,6 +156,7 @@ class QuestionGenerator {
   }) {
     for (int t = 0; t < tries; t++) {
       final b = _randInt(math.max(2, min), max);
+
       final qMin = (min / b).ceil();
       final qMax = (max / b).floor();
 
@@ -81,7 +172,9 @@ class QuestionGenerator {
     return null;
   }
 
-  // ---------- Basic arithmetic ----------
+  // ---------------------------------------------------------------------------
+  // BASIC ARITHMETIC
+  // ---------------------------------------------------------------------------
   static List<Question> _basic({
     required String op,
     required int min,
@@ -98,9 +191,9 @@ class QuestionGenerator {
 
         case '-':
           if (b > a) {
-            final tmp = a;
+            final t = a;
             a = b;
-            b = tmp;
+            b = t;
           }
           return Question(expression: '$a - $b = ?', correctAnswer: '${a - b}');
 
@@ -109,7 +202,7 @@ class QuestionGenerator {
 
         case '÷':
           final pair = _findIntegerDivisionPair(min, max);
-          if (pair != null && pair['b'] != 0) {
+          if (pair != null) {
             return Question(
               expression: '${pair['a']} ÷ ${pair['b']} = ?',
               correctAnswer: '${pair['q']}',
@@ -129,7 +222,9 @@ class QuestionGenerator {
     });
   }
 
-  // ---------- Percentage ----------
+  // ---------------------------------------------------------------------------
+  // PERCENTAGE
+  // ---------------------------------------------------------------------------
   static List<Question> _percentage(int min, int max, int count) {
     return List.generate(count, (_) {
       final base = _randInt(min, max);
@@ -143,7 +238,9 @@ class QuestionGenerator {
     });
   }
 
-  // ---------- Average ----------
+  // ---------------------------------------------------------------------------
+  // AVERAGE
+  // ---------------------------------------------------------------------------
   static List<Question> _average(int min, int max, int count) {
     return List.generate(count, (_) {
       final nums = List.generate(3, (_) => _randInt(min, max));
@@ -158,7 +255,9 @@ class QuestionGenerator {
     });
   }
 
-  // ---------- Square ----------
+  // ---------------------------------------------------------------------------
+  // SQUARE
+  // ---------------------------------------------------------------------------
   static List<Question> _square(int min, int max, int count) {
     final nMin = (min <= 0) ? 0 : sqrtCeil(min);
     final nMax = sqrtFloor(max);
@@ -176,16 +275,19 @@ class QuestionGenerator {
     });
   }
 
-  // ---------- Cube ----------
+  // ---------------------------------------------------------------------------
+  // CUBE
+  // ---------------------------------------------------------------------------
   static List<Question> _cube(int min, int max, int count) {
     final nMin = cubeRootCeil(min);
     final nMax = cubeRootFloor(max);
 
     if (nMin > nMax) {
-      return List.generate(count, (_) {
-        final n = _randInt(min, max);
-        return Question(expression: '$n³ = ?', correctAnswer: '${n * n * n}');
-      });
+      final n = _randInt(min, max);
+      return List.generate(
+        count,
+        (_) => Question(expression: '$n³ = ?', correctAnswer: '${n * n * n}'),
+      );
     }
 
     return List.generate(count, (_) {
@@ -194,9 +296,12 @@ class QuestionGenerator {
     });
   }
 
-  // ---------- Square Root ----------
+  // ---------------------------------------------------------------------------
+  // SQUARE ROOT
+  // ---------------------------------------------------------------------------
   static List<Question> _squareRoot(int min, int max, int count) {
     final vals = <int>[];
+
     for (int n = sqrtCeil(min); n <= sqrtFloor(max); n++) {
       vals.add(n * n);
     }
@@ -216,9 +321,12 @@ class QuestionGenerator {
     });
   }
 
-  // ---------- Cube Root ----------
+  // ---------------------------------------------------------------------------
+  // CUBE ROOT
+  // ---------------------------------------------------------------------------
   static List<Question> _cubeRoot(int min, int max, int count) {
     final vals = <int>[];
+
     for (int n = cubeRootCeil(min); n <= cubeRootFloor(max); n++) {
       vals.add(n * n * n);
     }
@@ -238,7 +346,9 @@ class QuestionGenerator {
     });
   }
 
-  // ---------- Tables ----------
+  // ---------------------------------------------------------------------------
+  // TABLES
+  // ---------------------------------------------------------------------------
   static List<Question> _tables(int min, int max, int count) {
     final base = _randInt(min, max);
 
@@ -251,7 +361,9 @@ class QuestionGenerator {
     });
   }
 
-  // ---------- Trigonometry ----------
+  // ---------------------------------------------------------------------------
+  // TRIGONOMETRY
+  // ---------------------------------------------------------------------------
   static List<Question> _trigonometry(int count) {
     final funcs = ['sin', 'cos', 'tan'];
     final angles = [0, 30, 45, 60, 90];
@@ -272,15 +384,14 @@ class QuestionGenerator {
     });
   }
 
-  // ---------- Data Interpretation ----------
+  // ---------------------------------------------------------------------------
+  // DATA INTERPRETATION
+  // ---------------------------------------------------------------------------
   static List<Question> _dataInterpretation(int min, int max, int count) {
     return List.generate(count, (_) {
       final prev = _randInt(min, max);
       var curr = _randInt(min, max);
-
-      if (curr == prev) {
-        curr = (curr == max) ? curr - 1 : curr + 1;
-      }
+      if (curr == prev) curr++;
 
       final change = (((curr - prev) / prev) * 100).toStringAsFixed(1);
 
@@ -291,7 +402,9 @@ class QuestionGenerator {
     });
   }
 
-  // ---------- Mixed ----------
+  // ---------------------------------------------------------------------------
+  // MIXED MODE (fallback)
+  // ---------------------------------------------------------------------------
   static List<Question> _mixed(int min, int max, int count) {
     const topics = [
       'addition',
@@ -313,14 +426,13 @@ class QuestionGenerator {
     });
   }
 
-  // ---------- Math Helpers ----------
+  // ---------------------------------------------------------------------------
+  // MATH HELPERS
+  // ---------------------------------------------------------------------------
   static int sqrtFloor(int x) => x < 0 ? 0 : math.sqrt(x).floor();
   static int sqrtCeil(int x) => x <= 0 ? 0 : math.sqrt(x).ceil();
-
   static int cubeRootFloor(int x) =>
       x < 0 ? -math.pow(x.abs(), 1 / 3).floor() : math.pow(x, 1 / 3).floor();
-
   static int cubeRootCeil(int x) => x <= 0 ? 0 : math.pow(x, 1 / 3).ceil();
-
   static int cbrt(int x) => math.pow(x, 1 / 3).round();
 }

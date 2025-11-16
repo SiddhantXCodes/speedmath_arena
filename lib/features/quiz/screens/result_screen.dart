@@ -1,69 +1,84 @@
-// lib/features/quiz/screens/result_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'quiz_screen.dart';
+
 import '../../../theme/app_theme.dart';
-import '../usecase/generate_questions.dart';
 import '../../performance/screens/performance_screen.dart';
 import '../../home/screens/home_screen.dart';
 import 'leaderboard_screen.dart';
 import '../../../providers/performance_provider.dart';
+import '../../../services/hive_service.dart';
+import '../../../models/daily_score.dart';
+
+import 'quiz_screen.dart';
 
 class ResultScreen extends StatelessWidget {
-  final String title;
-  final int total;
   final int score;
-  final int correct;
-  final int incorrect;
   final int timeTakenSeconds;
-  final Map<int, String> userAnswers;
-  final List<Question> questions;
   final QuizMode mode;
 
   const ResultScreen({
     super.key,
-    required this.title,
-    required this.total,
     required this.score,
-    required this.correct,
-    required this.incorrect,
     required this.timeTakenSeconds,
-    required this.userAnswers,
-    required this.questions,
     this.mode = QuizMode.practice,
   });
 
-  bool get isRanked => mode == QuizMode.dailyRanked;
+  bool get isRanked =>
+      mode == QuizMode.dailyRanked || mode == QuizMode.timedRanked;
+
+  // ----------------------------------------------------------
+  // LOAD HISTORY BASED ON QUIZ TYPE
+  // ----------------------------------------------------------
+  List<DailyScore> _loadHistory() {
+    switch (mode) {
+      case QuizMode.practice:
+        return HiveService.getPracticeScores();
+
+      case QuizMode.dailyRanked:
+      case QuizMode.timedRanked:
+        return HiveService.getRankedScores();
+
+      case QuizMode.challenge:
+        return HiveService.getMixedScores();
+
+      default:
+        return HiveService.getPracticeScores();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final accent = AppTheme.adaptiveAccent(context);
     final textColor = AppTheme.adaptiveText(context);
+    final surface = AppTheme.adaptiveCard(context);
 
-    // Ranked → refresh Firebase streak only
+    // Refresh performance only for ranked
     if (isRanked) {
       Future.microtask(() {
-        final perf = Provider.of<PerformanceProvider>(context, listen: false);
-        perf.reloadAll();
+        Provider.of<PerformanceProvider>(context, listen: false).reloadAll();
       });
     }
 
     final mins = (timeTakenSeconds ~/ 60).toString().padLeft(2, '0');
     final secs = (timeTakenSeconds % 60).toString().padLeft(2, '0');
 
+    // Load filtered attempts
+    final List<DailyScore> history = _loadHistory()
+      ..sort((a, b) => b.date.compareTo(a.date));
+
     return WillPopScope(
       onWillPop: () async {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (route) => false,
+          (_) => false,
         );
         return false;
       },
       child: Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
 
+        // --------------------------- APP BAR ---------------------------
         appBar: AppBar(
           backgroundColor: accent,
           leading: IconButton(
@@ -75,7 +90,7 @@ class ResultScreen extends StatelessWidget {
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (_) => const HomeScreen()),
-                (route) => false,
+                (_) => false,
               );
             },
           ),
@@ -89,17 +104,17 @@ class ResultScreen extends StatelessWidget {
           centerTitle: true,
         ),
 
+        // --------------------------- BODY ---------------------------
         body: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              // ⭐ Score Card
+              // ----------------------------------------------------
+              // ⭐ SCORE CARD
+              // ----------------------------------------------------
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 16,
-                  horizontal: 16,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
                   color: accent.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(14),
@@ -123,53 +138,44 @@ class ResultScreen extends StatelessWidget {
                     Text(
                       "$score",
                       style: TextStyle(
-                        fontSize: 30,
+                        fontSize: 34,
                         fontWeight: FontWeight.bold,
                         color: accent,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Correct: $correct | Incorrect: $incorrect",
-                      style: TextStyle(
-                        color: textColor.withOpacity(0.8),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 10),
                     Text(
                       "Time Taken: $mins:$secs",
-                      style: TextStyle(color: textColor.withOpacity(0.7)),
+                      style: TextStyle(
+                        color: textColor.withOpacity(0.8),
+                        fontSize: 15,
+                      ),
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
-              // 🔘 Buttons Row
+              // ----------------------------------------------------
+              // 🔘 MAIN BUTTONS
+              // ----------------------------------------------------
               Row(
                 children: [
-                  // HOME BUTTON
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pushAndRemoveUntil(
                           context,
                           MaterialPageRoute(builder: (_) => const HomeScreen()),
-                          (route) => false,
+                          (_) => false,
                         );
                       },
-                      icon: const Icon(Icons.home_rounded, color: Colors.white),
-                      label: const Text(
-                        "Home",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      icon: const Icon(Icons.home_rounded),
+                      label: const Text("Home"),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: accent,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -191,10 +197,7 @@ class ResultScreen extends StatelessWidget {
                           );
                         },
                         icon: const Icon(Icons.leaderboard_rounded),
-                        label: const Text(
-                          "Leaderboard",
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
+                        label: const Text("Leaderboard"),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           side: BorderSide(color: accent, width: 1.5),
@@ -208,9 +211,11 @@ class ResultScreen extends StatelessWidget {
                 ],
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 18),
 
-              // 📊 Performance Page Button
+              // ----------------------------------------------------
+              // 📊 PERFORMANCE SCREEN
+              // ----------------------------------------------------
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -223,10 +228,7 @@ class ResultScreen extends StatelessWidget {
                     );
                   },
                   icon: const Icon(Icons.insights_rounded),
-                  label: const Text(
-                    "Performance Page",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                  label: const Text("Performance Page"),
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(color: accent, width: 1.4),
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -237,79 +239,97 @@ class ResultScreen extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 10),
+              const SizedBox(height: 22),
 
+              // ----------------------------------------------------
+              // 🕒 HISTORY TITLE
+              // ----------------------------------------------------
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  "Question Review",
+                  "Past Attempts (${history.length})",
                   style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.bold,
                     fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
                   ),
                 ),
               ),
-              const SizedBox(height: 6),
 
-              // 📄 Review List
+              const SizedBox(height: 12),
+
+              // ----------------------------------------------------
+              // 📜 HISTORY LIST
+              // ----------------------------------------------------
               Expanded(
-                child: ListView.builder(
-                  itemCount: questions.length,
-                  itemBuilder: (context, index) {
-                    final q = questions[index];
-                    final userAns = userAnswers[index];
-                    final correctAns = q.correctAnswer.trim();
-                    final isCorrect =
-                        userAns != null && userAns.trim() == correctAns;
-
-                    return Container(
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: isCorrect
-                            ? Colors.green.withOpacity(0.08)
-                            : Colors.red.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isCorrect
-                              ? Colors.green.withOpacity(0.4)
-                              : Colors.red.withOpacity(0.4),
+                child: history.isEmpty
+                    ? Center(
+                        child: Text(
+                          "No previous attempts",
+                          style: TextStyle(color: textColor.withOpacity(0.6)),
                         ),
+                      )
+                    : ListView.builder(
+                        itemCount: history.length,
+                        itemBuilder: (context, index) {
+                          final s = history[index];
+
+                          final d = s.date;
+                          final date =
+                              "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
+
+                          final mm = (s.timeTakenSeconds ~/ 60)
+                              .toString()
+                              .padLeft(2, '0');
+                          final ss = (s.timeTakenSeconds % 60)
+                              .toString()
+                              .padLeft(2, '0');
+
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: surface,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                /// DATE
+                                Text(
+                                  date,
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+
+                                /// TIME
+                                Text(
+                                  "$mm:$ss",
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: textColor.withOpacity(0.8),
+                                  ),
+                                ),
+
+                                /// SCORE
+                                Text(
+                                  "${s.score}",
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: accent,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "${index + 1}. ${q.expression}",
-                            style: TextStyle(
-                              color: textColor,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            "Your answer: ${userAns ?? '-'}",
-                            style: TextStyle(
-                              color: isCorrect
-                                  ? Colors.green
-                                  : Colors.redAccent,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            "Correct answer: $correctAns",
-                            style: TextStyle(
-                              color: textColor.withOpacity(0.8),
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
               ),
             ],
           ),

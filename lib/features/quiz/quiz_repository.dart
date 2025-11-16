@@ -1,196 +1,160 @@
-//lib/features/quiz/quiz_repository.dart
 import 'dart:developer' as dev;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../services/hive_service.dart';
-import '../../models/quiz_session_model.dart';
-import '../../models/practice_log.dart';
 import '../../models/daily_score.dart';
-import '../../models/daily_quiz_meta.dart';
 
-/// QuizRepository – Firebase controls streak ONLY.
-/// No local streak logic here.
+/// New simplified QuizRepository for new quiz system.
+/// - Score only
+/// - Time taken only
+/// - No wrong/correct breakdown
+/// - No saved questions
+/// - Leaderboard = score + time taken
 class QuizRepository {
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
   // ---------------------------------------------------------------------------
-  // 💾 OFFLINE STORAGE
+  // 🟦 PRACTICE MODE → LOCAL (Hive: practice_scores)
   // ---------------------------------------------------------------------------
-  Future<void> saveOfflineResult(Map<String, dynamic> result) async {
+  Future<void> savePracticeScore(int score, int timeTakenSeconds) async {
     try {
-      final logData = PracticeLog(
+      final entry = DailyScore(
         date: DateTime.now(),
-        topic: result['topic'] ?? 'Practice',
-        category: result['category'] ?? 'General',
-        correct: result['correct'] ?? 0,
-        incorrect: result['incorrect'] ?? 0,
-        score: result['score'] ?? 0,
-        total: result['total'] ?? 10,
-        avgTime: (result['avgTime'] ?? 0).toDouble(),
-        timeSpentSeconds: result['timeSpentSeconds'] ?? 0,
-        questions: List<Map<String, dynamic>>.from(result['questions'] ?? []),
-        userAnswers: Map<int, String>.from(result['userAnswers'] ?? {}),
+        score: score,
+        totalQuestions: score,
+        timeTakenSeconds: timeTakenSeconds,
+        isRanked: false,
       );
 
-      await HiveService.addPracticeLog(logData);
-      dev.log("✅ Offline quiz result saved");
+      await HiveService.savePracticeScore(entry);
+
+      dev.log("📘 Practice score saved (practice_scores)");
     } catch (e, st) {
-      dev.log("⚠️ Failed to save offline quiz result: $e", stackTrace: st);
+      dev.log("❌ Failed to save practice score: $e", stackTrace: st);
     }
   }
 
   // ---------------------------------------------------------------------------
-  // 💾 QUEUE OFFLINE RANKED SESSION
+  // 🟨 MIXED PRACTICE MODE → LOCAL (Hive: mixed_scores)
   // ---------------------------------------------------------------------------
-  Future<void> saveOfflineSession(QuizSessionModel session) async {
+  Future<void> saveMixedScore(int score, int timeTakenSeconds) async {
     try {
-      await HiveService.addDailyScore(
-        DailyScore(
-          date: DateTime.now(),
-          score: session.score,
-          totalQuestions: session.total,
-          timeTakenSeconds: session.timeSpentSeconds,
-          isRanked: true,
-        ),
+      final entry = DailyScore(
+        date: DateTime.now(),
+        score: score,
+        totalQuestions: score,
+        timeTakenSeconds: timeTakenSeconds,
+        isRanked: false,
       );
 
-      await HiveService.saveDailyQuizMeta(
-        DailyQuizMeta(
-          date: DateTime.now().toIso8601String().substring(0, 10),
-          totalQuestions: session.total,
-          score: session.score,
-          difficulty: session.difficulty ?? 'normal',
-        ),
-      );
+      await HiveService.saveMixedScore(entry);
 
-      await HiveService.queueForSync('ranked_quiz', session.toMap());
-      dev.log("📥 Ranked session queued for sync");
+      dev.log("📗 Mixed practice score saved (mixed_scores)");
     } catch (e, st) {
-      dev.log("⚠️ Failed to queue offline ranked: $e", stackTrace: st);
+      dev.log("❌ Failed to save mixed score: $e", stackTrace: st);
     }
   }
 
   // ---------------------------------------------------------------------------
-  // ☁️ SAVE RANKED RESULT ONLINE
+  // 🟥 RANKED MODE → FIREBASE + LOCAL CACHE
   // ---------------------------------------------------------------------------
-  Future<void> saveRankedResult(QuizSessionModel session) async {
+  Future<void> saveRankedScore(int score, int timeTakenSeconds) async {
     final user = _auth.currentUser;
 
     if (user == null) {
-      dev.log("⚠️ No user logged in — saving offline only");
-      await saveOfflineResult(session.toMap());
+      dev.log("⚠️ User not logged in → queue ranked offline");
+      await _queueOfflineRanked(score, timeTakenSeconds);
       return;
     }
 
     try {
-      await _uploadRankedToFirebase(user, session);
-      dev.log("🔥 Ranked quiz uploaded successfully");
+      await _uploadRankedToFirebase(user, score, timeTakenSeconds);
+      dev.log("🔥 Ranked result uploaded");
     } catch (e, st) {
-      dev.log(
-        "❌ Firebase upload failed — queued offline",
-        error: e,
-        stackTrace: st,
-      );
-      await saveOfflineSession(session);
+      dev.log("❌ Upload failed — queued offline", error: e, stackTrace: st);
+      await _queueOfflineRanked(score, timeTakenSeconds);
     }
   }
 
   // ---------------------------------------------------------------------------
-  // 🔥 INTERNAL FIREBASE UPLOAD
+  // 🟩 INTERNAL: Push ranked score to Firestore
   // ---------------------------------------------------------------------------
   Future<void> _uploadRankedToFirebase(
     User user,
-    QuizSessionModel session,
+    int score,
+    int timeTakenSeconds,
   ) async {
     final todayKey = DateTime.now().toIso8601String().substring(0, 10);
 
-    // ---------------- DAILY LEADERBOARD ----------------
-    final dailyRef = _firestore
+    final entryRef = _firestore
         .collection('daily_leaderboard')
         .doc(todayKey)
         .collection('entries')
         .doc(user.uid);
 
-    await dailyRef.set({
+    await entryRef.set({
       'uid': user.uid,
       'name': user.displayName ?? 'Player',
       'photoUrl': user.photoURL ?? '',
-      'score': session.score,
-      'correct': session.correct,
-      'incorrect': session.incorrect,
-      'total': session.total,
-      'timeTaken': session.timeSpentSeconds,
+      'score': score,
+      'timeTaken': timeTakenSeconds,
       'timestamp': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
-    dev.log("✅ Daily leaderboard updated");
+    dev.log("🏆 Daily leaderboard updated");
 
-    // ---------------- ALL-TIME LEADERBOARD ----------------
-    final allRef = _firestore.collection('alltime_leaderboard').doc(user.uid);
-    final allSnap = await allRef.get();
-
-    if (allSnap.exists) {
-      final old = allSnap.data()!;
-      await allRef.update({
-        'name': user.displayName ?? 'Player',
-        'photoUrl': user.photoURL ?? '',
-        'totalScore': (old['totalScore'] ?? 0) + session.score,
-        'quizzesTaken': (old['quizzesTaken'] ?? 0) + 1,
-        'bestDailyScore': session.score > (old['bestDailyScore'] ?? 0)
-            ? session.score
-            : old['bestDailyScore'],
-        'lastUpdated': FieldValue.serverTimestamp(),
-      });
-    } else {
-      await allRef.set({
-        'uid': user.uid,
-        'name': user.displayName ?? 'Player',
-        'photoUrl': user.photoURL ?? '',
-        'totalScore': session.score,
-        'quizzesTaken': 1,
-        'bestDailyScore': session.score,
-        'lastUpdated': FieldValue.serverTimestamp(),
-      });
-    }
-
-    dev.log("✅ All-time leaderboard updated");
-
-    // ---------------- LOCAL CACHE (NO STREAK!!) ----------------
-    await HiveService.addDailyScore(
+    // Save ranked result locally
+    await HiveService.saveRankedScore(
       DailyScore(
-        date: DateTime.parse(todayKey),
-        score: session.score,
-        totalQuestions: session.total,
-        timeTakenSeconds: session.timeSpentSeconds,
+        date: DateTime.now(),
+        score: score,
+        totalQuestions: score,
+        timeTakenSeconds: timeTakenSeconds,
         isRanked: true,
       ),
     );
   }
 
   // ---------------------------------------------------------------------------
-  // 🔥 REQUIRED BY SYNC MANAGER — Upload queued ranked quiz
+  // 🟨 OFFLINE QUEUE FOR RANKED
   // ---------------------------------------------------------------------------
-  Future<void> syncOfflineRankedFromQueue(Map<String, dynamic> data) async {
+  Future<void> _queueOfflineRanked(int score, int timeTakenSeconds) async {
     try {
-      final session = QuizSessionModel.fromMap(data);
-      final user = _auth.currentUser;
+      await HiveService.queueForSync('ranked_quiz', {
+        'score': score,
+        'timeTaken': timeTakenSeconds,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
 
-      if (user == null) {
-        dev.log("❌ Cannot sync ranked quiz — no logged in user");
-        return;
-      }
-
-      await _uploadRankedToFirebase(user, session);
-      dev.log("✅ Synced queued ranked session");
+      dev.log("📥 Ranked result queued offline");
     } catch (e, st) {
-      dev.log("❌ Failed to sync queued ranked session: $e", stackTrace: st);
+      dev.log("❌ Failed queue ranked: $e", stackTrace: st);
     }
   }
 
   // ---------------------------------------------------------------------------
-  // 🔍 LEADERBOARD STREAMS
+  // 🟧 SYNC QUEUED RANKED SCORE
+  // ---------------------------------------------------------------------------
+  Future<void> syncOfflineRankedFromQueue(Map<String, dynamic> data) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
+
+      final score = data['score'] ?? 0;
+      final timeTaken = data['timeTaken'] ?? 0;
+
+      await _uploadRankedToFirebase(user, score, timeTaken);
+
+      dev.log("🔄 Offline ranked synced");
+    } catch (e, st) {
+      dev.log("❌ Rank sync failed: $e", stackTrace: st);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // LEADERBOARD STREAMS
   // ---------------------------------------------------------------------------
   Stream<QuerySnapshot<Map<String, dynamic>>> getDailyLeaderboard() {
     final todayKey = DateTime.now().toIso8601String().substring(0, 10);
@@ -200,7 +164,6 @@ class QuizRepository {
         .collection('entries')
         .orderBy('score', descending: true)
         .orderBy('timeTaken')
-        .limit(50)
         .snapshots();
   }
 
@@ -213,7 +176,7 @@ class QuizRepository {
   }
 
   // ---------------------------------------------------------------------------
-  // 🔍 UTILITY
+  // CHECK IF USER HAS PLAYED TODAY
   // ---------------------------------------------------------------------------
   Future<bool> hasPlayedToday() async {
     final user = _auth.currentUser;
@@ -221,6 +184,7 @@ class QuizRepository {
 
     try {
       final todayKey = DateTime.now().toIso8601String().substring(0, 10);
+
       final doc = await _firestore
           .collection('daily_leaderboard')
           .doc(todayKey)

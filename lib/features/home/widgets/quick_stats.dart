@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 
 import '../../../theme/app_theme.dart';
@@ -25,26 +24,25 @@ class QuickStatsSection extends StatefulWidget {
 
 class _QuickStatsSectionState extends State<QuickStatsSection>
     with WidgetsBindingObserver {
+  bool _loading = true;
+
+  // OFFLINE
+  int offlineSessions = 0;
+  int bestOfflineScore = 0;
+  int weeklyAverage = 0;
+
+  // RANKED
   int? todayRank;
   int? allTimeRank;
-  double avgScore = 0.0;
+  int? bestRankedScore;
+  bool attemptedToday = false;
 
-  bool _loading = true;
-  bool _attemptedToday = false;
-
-  int offlineSessions = 0;
-  int offlineCorrect = 0;
-  int offlineIncorrect = 0;
-  double offlineAvgTime = 0.0;
-
-  User? _lastUser;
   bool _isFetching = false;
-
-  // Debounce for refresh flood
   DateTime _lastFetch = DateTime.fromMillisecondsSinceEpoch(0);
+
   bool _shouldFetch() {
     final diff = DateTime.now().difference(_lastFetch).inMilliseconds;
-    if (diff < 400) return false; // Fetch only once every 400ms
+    if (diff < 350) return false;
     _lastFetch = DateTime.now();
     return true;
   }
@@ -55,8 +53,8 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<myauth.AuthProvider>().addListener(_handleUserChange);
-      context.read<PerformanceProvider>().addListener(_handlePerfChange);
+      context.read<myauth.AuthProvider>().addListener(_refetch);
+      context.read<PerformanceProvider>().addListener(_refetch);
       _fetchStats();
     });
   }
@@ -64,16 +62,17 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-
     try {
-      context.read<myauth.AuthProvider>().removeListener(_handleUserChange);
-      context.read<PerformanceProvider>().removeListener(_handlePerfChange);
+      context.read<myauth.AuthProvider>().removeListener(_refetch);
+      context.read<PerformanceProvider>().removeListener(_refetch);
     } catch (_) {}
-
     super.dispose();
   }
 
-  // App resumes from background
+  void _refetch() {
+    if (_shouldFetch()) _fetchStats();
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _shouldFetch()) {
@@ -81,125 +80,75 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
     }
   }
 
-  // Called whenever AuthProvider detects user change
-  void _handleUserChange() {
-    final current = FirebaseAuth.instance.currentUser;
-
-    // USER LOGGED OUT
-    if (current == null) {
-      // ✔ don't zero offline stats — reload them from Hive immediately
-      final local = HiveService.getStats() ?? {};
-
-      setState(() {
-        todayRank = null;
-        allTimeRank = null;
-        avgScore = 0;
-        _attemptedToday = false;
-
-        offlineSessions = local['sessions'] ?? 0;
-        offlineCorrect = local['totalCorrect'] ?? 0;
-        offlineIncorrect = local['totalIncorrect'] ?? 0;
-        offlineAvgTime = (local['avgTime'] ?? 0.0).toDouble();
-
-        _loading = false; // VERY IMPORTANT — fixes infinite spinner
-      });
-
-      _lastUser = null;
-      return;
-    }
-
-    // USER LOGGED IN (or switched account)
-    if (_lastUser?.uid != current.uid) {
-      _lastUser = current;
-      setState(() => _loading = true);
-      _fetchStats();
-    }
-  }
-
-  // Called when PerformanceProvider reloads streak/data
-  void _handlePerfChange() {
-    if (_shouldFetch()) _fetchStats();
-  }
-
-  // Build date key for Firestore
   String _dateKey(DateTime d) =>
       "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
 
-  // ============================================================
+  // ------------------------------------------------------------
   // MAIN FETCH
-  // ============================================================
+  // ------------------------------------------------------------
   Future<void> _fetchStats() async {
-    if (!mounted || _isFetching || !_shouldFetch()) return;
-
+    if (!mounted || _isFetching) return;
     _isFetching = true;
 
-    try {
-      setState(() => _loading = true);
+    setState(() => _loading = true);
 
-      // ------------------------
-      // OFFLINE (Instant read)
-      // ------------------------
-      final local = HiveService.getStats() ?? {};
-      offlineSessions = local['sessions'] ?? 0;
-      offlineCorrect = local['totalCorrect'] ?? 0;
-      offlineIncorrect = local['totalIncorrect'] ?? 0;
-      offlineAvgTime = (local['avgTime'] ?? 0.0).toDouble();
+    try {
+      // --------------------------------------------------
+      // OFFLINE DATA → From DailyScore hive entries
+      // --------------------------------------------------
+      final allScores = HiveService.getAllDailyScores();
+
+      offlineSessions = allScores.length;
+
+      bestOfflineScore = 0;
+      int sum = 0;
+      int count = 0;
+
+      final now = DateTime.now();
+
+      for (final s in allScores) {
+        // Best Offline Score (practice or ranked)
+        bestOfflineScore = (s.score > bestOfflineScore)
+            ? s.score
+            : bestOfflineScore;
+
+        // Weekly average (last 7 days)
+        final d = DateTime(s.date.year, s.date.month, s.date.day);
+        if (now.difference(d).inDays <= 6) {
+          sum += s.score;
+          count++;
+        }
+      }
+
+      weeklyAverage = (count > 0) ? (sum / count).round() : 0;
 
       final user = FirebaseAuth.instance.currentUser;
-      _lastUser = user;
 
-      // ------------------------
+      // --------------------------------------------------
       // USER NOT LOGGED IN
-      // ------------------------
+      // --------------------------------------------------
       if (user == null) {
+        todayRank = null;
+        allTimeRank = null;
+        bestRankedScore = null;
+        attemptedToday = false;
+
         if (mounted) setState(() => _loading = false);
         _isFetching = false;
         return;
       }
 
-      // ------------------------
-      // DAILY LEADERBOARD
-      // ------------------------
-      final firestore = FirebaseFirestore.instance;
-      final todayKey = _dateKey(DateTime.now());
+      // --------------------------------------------------
+      // FETCH RANKED DATA (from PerformanceProvider)
+      // --------------------------------------------------
+      final perf = context.read<PerformanceProvider>();
 
-      final daily = await firestore
-          .collection('daily_leaderboard')
-          .doc(todayKey)
-          .collection('entries')
-          .orderBy('score', descending: true)
-          .orderBy('timeTaken')
-          .get();
-
-      todayRank = null;
-      _attemptedToday = false;
-
-      int rank = 1;
-      for (final doc in daily.docs) {
-        if (doc.id == user.uid) {
-          todayRank = rank;
-          _attemptedToday = true;
-          break;
-        }
-        rank++;
-      }
-
-      // ------------------------
-      // ALL TIME
-      // ------------------------
-      final allTime = await firestore
-          .collection('alltime_leaderboard')
-          .doc(user.uid)
-          .get();
-
-      if (allTime.exists) {
-        final data = allTime.data()!;
-        final quizzes = (data['quizzesTaken'] ?? 1).toDouble();
-        final totalScore = (data['totalScore'] ?? 0).toDouble();
-        avgScore = quizzes > 0 ? totalScore / quizzes : 0;
-
-        allTimeRank = await _getGlobalRank(user.uid);
-      }
+      todayRank = perf.todayRank;
+      allTimeRank = perf.allTimeRank;
+      bestRankedScore = perf.bestScore;
+      attemptedToday = perf.dailyScores.containsKey(
+        DateTime(now.year, now.month, now.day),
+      );
 
       if (mounted) setState(() => _loading = false);
     } catch (e) {
@@ -211,30 +160,8 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
   }
 
   // ------------------------------------------------------------
-  // GET GLOBAL RANK (Optimized)
-  // ------------------------------------------------------------
-  Future<int?> _getGlobalRank(String uid) async {
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('alltime_leaderboard')
-          .orderBy('totalScore', descending: true)
-          .limit(200)
-          .get();
-
-      int r = 1;
-      for (final doc in snap.docs) {
-        if (doc.id == uid) return r;
-        r++;
-      }
-    } catch (e) {
-      debugPrint("⚠️ Rank error: $e");
-    }
-    return null;
-  }
-
-  // ============================================================
   // UI
-  // ============================================================
+  // ------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -244,17 +171,13 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
     final textColor = AppTheme.adaptiveText(context);
 
     if (_loading) {
-      return Container(
-        alignment: Alignment.center,
+      return SizedBox(
         height: 200,
-        child: const CircularProgressIndicator(strokeWidth: 2),
+        child: Center(
+          child: CircularProgressIndicator(color: accent, strokeWidth: 2),
+        ),
       );
     }
-
-    final totalAttempts = offlineCorrect + offlineIncorrect;
-    final accuracy = totalAttempts == 0
-        ? 0
-        : (offlineCorrect / totalAttempts) * 100;
 
     return Container(
       width: double.infinity,
@@ -270,6 +193,7 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
           ),
         ],
       ),
+
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -294,7 +218,7 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
                     ),
                   );
                 },
-                icon: Icon(Icons.insights_rounded, color: accent),
+                icon: Icon(Icons.insights, color: accent),
                 label: Text(
                   "Performance",
                   style: TextStyle(color: accent, fontWeight: FontWeight.w600),
@@ -305,26 +229,16 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
 
           const SizedBox(height: 14),
 
-          // OFFLINE ROW
+          // OFFLINE STATS ROW
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
+              _miniStat(Icons.school, "Sessions", "$offlineSessions", accent),
+              _miniStat(Icons.stars, "Best", "$bestOfflineScore", accent),
               _miniStat(
-                Icons.school_rounded,
-                "Sessions",
-                "$offlineSessions",
-                accent,
-              ),
-              _miniStat(
-                Icons.check_circle_rounded,
-                "Accuracy",
-                "${accuracy.toStringAsFixed(1)}%",
-                accent,
-              ),
-              _miniStat(
-                Icons.timer_rounded,
-                "Avg Time",
-                "${offlineAvgTime.toStringAsFixed(1)}s",
+                Icons.show_chart,
+                "Weekly Avg",
+                "$weeklyAverage",
                 accent,
               ),
             ],
@@ -332,18 +246,16 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
 
           const SizedBox(height: 20),
 
-          user != null
-              ? _buildRankedStats(accent)
-              : _buildGuestStats(accent, textColor),
+          user != null ? _rankedStats(accent) : _guestCTA(accent, textColor),
         ],
       ),
     );
   }
 
   // ------------------------------------------------------------
-  // RANKED (Logged in)
+  // RANKED (LOGGED-IN)
   // ------------------------------------------------------------
-  Widget _buildRankedStats(Color accent) {
+  Widget _rankedStats(Color accent) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -353,34 +265,33 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
       child: Column(
         children: [
           Text(
-            _attemptedToday
+            attemptedToday
                 ? "🎯 You've completed today's ranked quiz!"
                 : "⚡ Take today's Ranked Quiz and climb the leaderboard!",
             textAlign: TextAlign.center,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
           ),
-
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _miniStat(
-                Icons.emoji_events_rounded,
+                Icons.emoji_events,
                 "Today Rank",
                 todayRank != null ? "#$todayRank" : "—",
                 accent,
               ),
               _miniStat(
-                Icons.bar_chart_rounded,
+                Icons.bar_chart,
                 "All-Time",
                 allTimeRank != null ? "#$allTimeRank" : "—",
                 accent,
               ),
               _miniStat(
-                Icons.speed_rounded,
-                "Avg Score",
-                avgScore.toStringAsFixed(1),
+                Icons.bolt,
+                "Best Score",
+                bestRankedScore?.toString() ?? "—",
                 accent,
               ),
             ],
@@ -391,48 +302,42 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () async {
-                final perf = context.read<PerformanceProvider>();
-                await perf.reloadAll();
-
-                if (_attemptedToday) {
+              onPressed: () {
+                if (attemptedToday) {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => const LeaderboardScreen(),
                     ),
                   );
-                  return;
+                } else {
+                  showQuizEntryPopup(
+                    context: context,
+                    title: "Daily Ranked Quiz",
+                    infoLines: [
+                      "150 seconds timer",
+                      "Score = total correct answers",
+                      "1 attempt per day",
+                    ],
+                    onStart: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DailyRankedQuizEntry(),
+                        ),
+                      ).then((_) {
+                        context.read<PerformanceProvider>().reloadAll();
+                        _fetchStats();
+                      });
+                    },
+                  );
                 }
-
-                showQuizEntryPopup(
-                  context: context,
-                  title: "Daily Ranked Quiz",
-                  infoLines: [
-                    "10 fixed questions.",
-                    "Total time: 60 seconds.",
-                    "Only 1 attempt allowed.",
-                  ],
-                  onStart: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DailyRankedQuizEntry(),
-                      ),
-                    ).then((_) async {
-                      await perf.reloadAll();
-                      if (mounted) _fetchStats();
-                    });
-                  },
-                );
               },
               icon: Icon(
-                _attemptedToday
-                    ? Icons.leaderboard_rounded
-                    : Icons.flash_on_rounded,
+                attemptedToday ? Icons.leaderboard : Icons.flash_on_rounded,
               ),
               label: Text(
-                _attemptedToday
+                attemptedToday
                     ? "View Leaderboard"
                     : "Take Today's Ranked Quiz",
               ),
@@ -452,9 +357,9 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
   }
 
   // ------------------------------------------------------------
-  // GUEST UI
+  // GUEST
   // ------------------------------------------------------------
-  Widget _buildGuestStats(Color accent, Color textColor) {
+  Widget _guestCTA(Color accent, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -472,7 +377,7 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
               fontSize: 13,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -497,7 +402,7 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
   }
 
   // ------------------------------------------------------------
-  // MINI STAT
+  // MINI STAT WIDGET
   // ------------------------------------------------------------
   Widget _miniStat(IconData icon, String title, String value, Color accent) {
     return Column(
@@ -509,7 +414,7 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: accent,
-            fontSize: 14,
+            fontSize: 15,
           ),
         ),
         Text(
