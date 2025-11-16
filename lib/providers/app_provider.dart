@@ -1,4 +1,4 @@
-// lib/presentation/providers/app_provider.dart
+// lib/providers/app_provider.dart
 import 'package:flutter/material.dart';
 import '../services/sync_manager.dart';
 

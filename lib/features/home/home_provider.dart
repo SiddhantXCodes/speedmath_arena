@@ -1,8 +1,9 @@
+//lib/features/home/home_provider.dart
 import 'package:flutter/material.dart';
 import '../../services/sync_manager.dart';
 import 'load_home_data.dart';
-import '../performance/performance_provider.dart';
-import '../practice/practice_log_provider.dart';
+import '../../providers/performance_provider.dart';
+import '../../providers/practice_log_provider.dart';
 
 /// 🏠 HomeProvider — coordinates data loading + syncing for HomeScreen
 class HomeProvider extends ChangeNotifier {
@@ -28,7 +29,7 @@ class HomeProvider extends ChangeNotifier {
 
     try {
       // 🧠 1️⃣ Reload local performance & practice stats
-      await performance.loadFromLocal(forceReload: true);
+      await performance.loadFromLocal(force: true);
 
       // ⚙️ 2️⃣ Execute domain usecase (home data prefetch)
       await loadHomeData.execute();

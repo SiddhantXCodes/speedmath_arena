@@ -1,6 +1,4 @@
-/// 📘 Centralized Tips & Tricks Data Source
-/// Can be imported anywhere in the app.
-
+//lib/features/tips/tips_data.dart
 final Map<String, List<String>> tipsData = {
   "Addition": [
     "Add from left to right for faster mental math.",

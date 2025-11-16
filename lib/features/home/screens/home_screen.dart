@@ -1,22 +1,22 @@
+// lib/features/home/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../app.dart';
-import '../../performance/performance_provider.dart';
-import '../../practice/practice_log_provider.dart';
+import '../../../providers/performance_provider.dart';
+import '../../../providers/practice_log_provider.dart';
 import '../../../theme/app_theme.dart';
 import '../widgets/practice_bar_section.dart';
 import '../widgets/top_bar.dart';
 import '../widgets/quick_stats.dart';
 import '../widgets/heatmap_section.dart';
+import '../../../features/auth/auth_provider.dart';
 
-// 📊 Feature Screens
+// Feature Screens
 import '../../performance/screens/performance_screen.dart';
 import '../../practice/screens/attempts_history_screen.dart';
 import '../../learn_daily/learn_daily_screen.dart';
 import '../../tips/screens/tips_home_screen.dart';
-import 'package:speedmaths_pro/debug/hive_debug_screen.dart';
 
-/// 🏠 Home Screen — Pull-Down Refresh Only
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -24,39 +24,73 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with RouteAware {
   bool _isRefreshing = false;
+  VoidCallback? _authListener;
 
-  /// 🔄 Manual pull-down refresh
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+
+    if (_authListener == null) {
+      final auth = context.read<AuthProvider>();
+
+      _authListener = () => _refreshActivityData();
+      auth.addListener(_authListener!);
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _refreshActivityData();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+
+    try {
+      if (_authListener != null) {
+        context.read<AuthProvider>().removeListener(_authListener!);
+      }
+    } catch (_) {}
+
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    _refreshActivityData();
+  }
+
+  // -------------------------------------------------------------
+  // Refresh Performance + Practice data
+  // -------------------------------------------------------------
   Future<void> _refreshActivityData() async {
     if (_isRefreshing) return;
+
     setState(() => _isRefreshing = true);
 
     try {
-      final performance = Provider.of<PerformanceProvider>(
-        context,
-        listen: false,
-      );
-      final practice = Provider.of<PracticeLogProvider>(context, listen: false);
+      final performance = context.read<PerformanceProvider>();
+      final practice = context.read<PracticeLogProvider>();
 
       await Future.wait([performance.reloadAll(), practice.loadLogs()]);
-
-      debugPrint("✅ Manual home refresh completed");
     } catch (e) {
-      debugPrint("⚠️ Manual refresh failed: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("⚠️ Refresh failed: $e"),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("⚠️ Refresh failed: $e"),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isRefreshing = false);
     }
   }
 
+  // Heatmap color
   Color _colorForValue(int v) {
     switch (v.clamp(0, 4)) {
       case 0:
@@ -75,13 +109,22 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final practice = Provider.of<PracticeLogProvider>(context);
-    final performance = Provider.of<PerformanceProvider>(context);
 
+    final practice = context.watch<PracticeLogProvider>();
+    final performance = context.watch<PerformanceProvider>();
+
+    // 🔥 Merge offline practice + online ranked attempts
     final activity = _mergeActivityMaps(
-      practice.getActivityMap(),
-      performance.dailyScores.keys.toList(),
+      practice.activityMap,
+      performance.dailyScores,
     );
+
+    // 🔥 MAIN FIX: wait until BOTH providers finish loading
+    final bool loadingProviders =
+        !practice.initialized || !performance.initialized;
+
+    final width = MediaQuery.of(context).size.width;
+    final isBigTablet = width >= 900;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -92,131 +135,298 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _refreshActivityData,
+          displacement: 70,
           color: theme.colorScheme.primary,
           backgroundColor: theme.cardColor,
-          displacement: 70,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
+          child: loadingProviders
+              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              : (isBigTablet
+                    ? _buildTabletLayout(context, activity, false)
+                    : _buildPhoneLayout(context, activity, false)),
+        ),
+      ),
+    );
+  }
+
+  // =============================================================
+  // PHONE LAYOUT
+  // =============================================================
+  Widget _buildPhoneLayout(
+    BuildContext context,
+    Map<DateTime, int> activity,
+    bool loadingProviders,
+  ) {
+    final theme = Theme.of(context);
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          _buildWelcomeSection(context),
+          const SizedBox(height: 16),
+
+          QuickStatsSection(isDarkMode: theme.brightness == Brightness.dark),
+
+          const SizedBox(height: 20),
+          const PracticeBarSection(),
+          const SizedBox(height: 20),
+
+          _buildFeatureCard(
+            context,
+            title: "Learn Daily",
+            subtitle: "A new math concept every day 🔥",
+            icon: Icons.menu_book_rounded,
+            iconColor: Colors.blueAccent,
+            gradientColors: [
+              theme.colorScheme.primary.withOpacity(0.15),
+              theme.colorScheme.primary.withOpacity(0.05),
+            ],
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LearnDailyScreen()),
+              );
+            },
+          ),
+
+          const SizedBox(height: 20),
+
+          _buildFeatureCard(
+            context,
+            title: "Tips & Tricks",
+            subtitle: "Quick math hacks ⚡",
+            icon: Icons.lightbulb_rounded,
+            iconColor: Colors.orangeAccent,
+            gradientColors: [
+              Colors.orangeAccent.withOpacity(0.15),
+              Colors.orangeAccent.withOpacity(0.05),
+            ],
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TipsHomeScreen()),
+              );
+            },
+          ),
+
+          const SizedBox(height: 20),
+
+          _buildWideCard(
+            context,
+            title: "Practice History",
+            subtitle: "Review your past quizzes",
+            icon: Icons.history_rounded,
+            accent: Colors.teal,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AttemptsHistoryScreen(),
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 20),
+
+          _buildWideCard(
+            context,
+            title: "Performance Insights",
+            subtitle: "Track accuracy & trends",
+            icon: Icons.trending_up_rounded,
+            accent: Colors.purpleAccent,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PerformanceScreen()),
+              );
+            },
+          ),
+
+          const SizedBox(height: 28),
+          _buildSectionTitle("Your Activity"),
+          const SizedBox(height: 8),
+
+          HeatmapSection(
+            isDarkMode: theme.brightness == Brightness.dark,
+            activity: activity,
+            colorForValue: _colorForValue,
+          ),
+
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
+  // =============================================================
+  // TABLET LAYOUT
+  // =============================================================
+  Widget _buildTabletLayout(
+    BuildContext context,
+    Map<DateTime, int> activity,
+    bool loadingProviders,
+  ) {
+    final theme = Theme.of(context);
+    final width = MediaQuery.of(context).size.width;
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // LEFT AREA
+          SizedBox(
+            width: width * 0.60,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 8),
-
                 _buildWelcomeSection(context),
                 const SizedBox(height: 16),
 
-                QuickStatsSection(
-                  isDarkMode: theme.brightness == Brightness.dark,
-                ),
-
-                const SizedBox(height: 20),
-                const PracticeBarSection(),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const HiveDebugScreen(),
-                      ),
-                    );
-                  },
-                  child: const Text("Open Hive Debug Viewer"),
-                ),
-                _buildFeatureCard(
-                  context,
-                  title: "Learn Daily",
-                  subtitle: "A new math concept to explore every day 🔥",
-                  icon: Icons.menu_book_rounded,
-                  gradientColors: [
-                    theme.colorScheme.primary.withOpacity(0.15),
-                    theme.colorScheme.primary.withOpacity(0.05),
-                  ],
-                  iconColor: Colors.blueAccent,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LearnDailyScreen()),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                _buildFeatureCard(
-                  context,
-                  title: "Tips & Tricks",
-                  subtitle: "Quick math hacks to improve efficiency ⚡",
-                  icon: Icons.lightbulb_rounded,
-                  gradientColors: [
-                    Colors.orangeAccent.withOpacity(0.15),
-                    Colors.orangeAccent.withOpacity(0.05),
-                  ],
-                  iconColor: Colors.orangeAccent,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const TipsHomeScreen()),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                _buildWideInfoCard(
-                  context,
-                  title: "Practice History",
-                  subtitle: "Review your past quizzes & progress",
-                  icon: Icons.history_rounded,
-                  accentColor: Colors.teal,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const AttemptsHistoryScreen(),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                _buildWideInfoCard(
-                  context,
-                  title: "Performance Insights",
-                  subtitle: "Track your accuracy & speed trends over time",
-                  icon: Icons.trending_up_rounded,
-                  accentColor: Colors.purpleAccent,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const PerformanceScreen(),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 28),
-
-                _buildSectionHeader("Your Activity"),
+                _buildSectionTitle("Your Activity"),
                 const SizedBox(height: 8),
+
                 HeatmapSection(
                   isDarkMode: theme.brightness == Brightness.dark,
                   activity: activity,
                   colorForValue: _colorForValue,
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 28),
+
+                _buildFeatureCard(
+                  context,
+                  title: "Learn Daily",
+                  subtitle: "A new math concept every day",
+                  icon: Icons.menu_book_rounded,
+                  iconColor: Colors.blueAccent,
+                  gradientColors: [
+                    theme.colorScheme.primary.withOpacity(0.15),
+                    theme.colorScheme.primary.withOpacity(0.05),
+                  ],
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const LearnDailyScreen(),
+                      ),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 20),
+
+                _buildWideCard(
+                  context,
+                  title: "Performance Insights",
+                  subtitle: "Track your progress",
+                  icon: Icons.trending_up_rounded,
+                  accent: Colors.purpleAccent,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PerformanceScreen(),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ),
-        ),
+
+          const SizedBox(width: 20),
+
+          // RIGHT
+          SizedBox(
+            width: width * 0.40,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                QuickStatsSection(
+                  isDarkMode: theme.brightness == Brightness.dark,
+                ),
+                const SizedBox(height: 20),
+
+                const PracticeBarSection(),
+                const SizedBox(height: 20),
+
+                _buildFeatureCard(
+                  context,
+                  title: "Tips & Tricks",
+                  subtitle: "Math hacks to speed up",
+                  icon: Icons.lightbulb_rounded,
+                  iconColor: Colors.orangeAccent,
+                  gradientColors: [
+                    Colors.orangeAccent.withOpacity(0.15),
+                    Colors.orangeAccent.withOpacity(0.05),
+                  ],
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TipsHomeScreen()),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 20),
+
+                _buildWideCard(
+                  context,
+                  title: "Practice History",
+                  subtitle: "Review your attempts",
+                  icon: Icons.history_rounded,
+                  accent: Colors.teal,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AttemptsHistoryScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  /// 👋 Welcome Header
+  // =============================================================
+  // Welcome Header
+  // =============================================================
   Widget _buildWelcomeSection(BuildContext context) {
     final theme = Theme.of(context);
+    final auth = context.watch<AuthProvider>();
+
+    final hour = DateTime.now().hour;
+
+    String greeting = hour < 12
+        ? "Good morning"
+        : hour < 17
+        ? "Good afternoon"
+        : "Good evening";
+
+    String name = "";
+    if (auth.user?.displayName != null &&
+        auth.user!.displayName!.trim().isNotEmpty) {
+      name = auth.user!.displayName!.split(" ").first;
+    }
+
+    final line = name.isEmpty ? "$greeting 👋" : "$greeting, $name 👋";
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          "Welcome back 👋",
+          line,
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w600,
             color: theme.colorScheme.primary,
@@ -231,7 +441,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// 🌈 Reusable Feature Card
+  // Feature Card
   Widget _buildFeatureCard(
     BuildContext context, {
     required String title,
@@ -242,9 +452,11 @@ class _HomeScreenState extends State<HomeScreen> {
     required VoidCallback onTap,
   }) {
     final theme = Theme.of(context);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: gradientColors,
@@ -252,20 +464,16 @@ class _HomeScreenState extends State<HomeScreen> {
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: gradientColors.first.withOpacity(0.2),
-            width: 1.2,
-          ),
+          border: Border.all(color: gradientColors.first.withOpacity(0.25)),
         ),
-        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
             Container(
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: iconColor.withOpacity(0.15),
                 shape: BoxShape.circle,
               ),
-              padding: const EdgeInsets.all(12),
               child: Icon(icon, size: 28, color: iconColor),
             ),
             const SizedBox(width: 14),
@@ -276,7 +484,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     title,
                     style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.bold,
                       color: theme.colorScheme.primary,
                     ),
                   ),
@@ -297,34 +505,35 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// 📈 Reusable Wide Info Card
-  Widget _buildWideInfoCard(
+  // Wide Card
+  Widget _buildWideCard(
     BuildContext context, {
     required String title,
     required String subtitle,
     required IconData icon,
-    required Color accentColor,
+    required Color accent,
     required VoidCallback onTap,
   }) {
     final theme = Theme.of(context);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        decoration: BoxDecoration(
-          color: theme.cardColor.withOpacity(0.95),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: accentColor.withOpacity(0.15), width: 1.2),
-        ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: accent.withOpacity(0.2)),
+          color: theme.cardColor,
+        ),
         child: Row(
           children: [
             Container(
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: accentColor.withOpacity(0.15),
+                color: accent.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              padding: const EdgeInsets.all(12),
-              child: Icon(icon, size: 26, color: accentColor),
+              child: Icon(icon, size: 26, color: accent),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -334,7 +543,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     title,
                     style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.bold,
                       color: theme.colorScheme.primary,
                     ),
                   ),
@@ -359,24 +568,31 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// 🧭 Section Header
-  Widget _buildSectionHeader(String title) {
+  // Utilities
+  Widget _buildSectionTitle(String title) {
     return Text(
       title,
       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
     );
   }
 
-  /// 🔄 Merge Offline + Online Activity
+  /// Merge offline practice map + online daily ranked scores
   Map<DateTime, int> _mergeActivityMaps(
     Map<DateTime, int> offline,
-    List<DateTime> ranked,
+    Map<DateTime, int> online,
   ) {
-    final merged = Map<DateTime, int>.from(offline);
-    for (final d in ranked) {
-      final k = DateTime(d.year, d.month, d.day);
-      merged[k] = (merged[k] ?? 0) + 1;
-    }
-    return merged.map((k, v) => MapEntry(k, v.clamp(0, 5)));
+    final merged = <DateTime, int>{};
+
+    offline.forEach((d, v) {
+      final day = DateTime(d.year, d.month, d.day);
+      merged[day] = (merged[day] ?? 0) + v;
+    });
+
+    online.forEach((d, _) {
+      final day = DateTime(d.year, d.month, d.day);
+      merged[day] = (merged[day] ?? 0) + 1;
+    });
+
+    return merged.map((d, v) => MapEntry(d, v.clamp(0, 12)));
   }
 }

@@ -1,3 +1,4 @@
+//lib/features/practice/practice_repository.dart
 import 'dart:developer';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,29 +6,30 @@ import '../../services/hive_service.dart';
 import '../../models/practice_log.dart';
 import '../../models/question_history.dart';
 
-/// 🧠 PracticeRepository — Handles all Practice-related logic (offline + online)
-/// - Saves sessions locally (Hive)
-/// - Fetches full practice history
-/// - Syncs logs to Firebase when online
-/// - Provides activity map for heatmap visualization
+/// 🧠 PracticeRepository — Handles Practice Logic (offline + sync)
+/// - Save sessions to Hive
+/// - Fetch local sessions
+/// - Queue offline logs for later sync
+/// - Upload logs to Firestore when online
+/// - Activity history for heatmap
 class PracticeRepository {
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
 
   /// ----------------------------------------------------------
-  /// 💾 Save a new practice session (Offline-first)
+  /// 💾 Save a Practice Session (Offline-First)
   /// ----------------------------------------------------------
   Future<void> savePracticeSession(PracticeLog entry) async {
     try {
-      // 🧩 1️⃣ Always save locally in Hive
+      // 1) Always save offline
       await HiveService.addPracticeLog(entry);
-      log("🧩 Practice session saved locally: ${entry.topic}");
+      log("🧩 Practice saved offline: ${entry.topic}");
 
-      // ☁️ 2️⃣ Queue for sync if user is logged in
+      // 2) Queue for sync if logged in
       final user = _auth.currentUser;
       if (user != null) {
-        await HiveService.queueForSync('practice_logs', entry.toMap());
-        log("📤 Practice session queued for sync (user: ${user.uid})");
+        await HiveService.queueForSync("practice_logs", entry.toMap());
+        log("📤 Queued for sync (user: ${user.uid})");
       }
     } catch (e, st) {
       log("⚠️ Failed to save practice session: $e", stackTrace: st);
@@ -35,19 +37,29 @@ class PracticeRepository {
   }
 
   /// ----------------------------------------------------------
-  /// 🧾 Get all local practice sessions
+  /// 🧾 Get All Local Practice Sessions
   /// ----------------------------------------------------------
   List<PracticeLog> getAllLocalSessions() {
     try {
       return HiveService.getPracticeLogs();
     } catch (e, st) {
-      log("⚠️ Failed to get practice logs: $e", stackTrace: st);
+      log("⚠️ getAllLocalSessions error: $e", stackTrace: st);
+      return [];
+    }
+  }
+
+  /// 🔁 Added convenience method for provider
+  List<Map<String, dynamic>> getAllSessions() {
+    try {
+      return HiveService.getPracticeLogs().map((e) => e.toMap()).toList();
+    } catch (e, st) {
+      log("⚠️ getAllSessions error: $e", stackTrace: st);
       return [];
     }
   }
 
   /// ----------------------------------------------------------
-  /// 📜 Get full question history (optional)
+  /// 📜 Get Question History
   /// ----------------------------------------------------------
   List<QuestionHistory> getQuestionHistory() {
     try {
@@ -59,78 +71,87 @@ class PracticeRepository {
   }
 
   /// ----------------------------------------------------------
-  /// 📤 Sync pending practice logs → Firebase (when online)
+  /// 📤 Sync Pending Offline Practice Logs → Firebase
   /// ----------------------------------------------------------
-  Future<void> syncPendingSessions() async {
+  Future<int> syncPendingSessions() async {
     final user = _auth.currentUser;
     if (user == null) {
-      log("⚠️ User not logged in — skipping practice log sync");
-      return;
+      log("⚠️ Not logged in → skipping sync");
+      return 0;
     }
 
     try {
       final pending = HiveService.getPendingSyncs()
-          .where((item) => item['type'] == 'practice_logs')
+          .where((item) => item["type"] == "practice_logs")
           .toList();
 
       if (pending.isEmpty) {
-        log("ℹ️ No pending practice logs to sync");
-        return;
+        log("ℹ️ No pending practice logs");
+        return 0;
       }
+
+      int count = 0;
 
       for (final item in pending) {
-        final data = Map<String, dynamic>.from(item['data']);
-        final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+        final data = Map<String, dynamic>.from(item["data"]);
+        final id = DateTime.now().millisecondsSinceEpoch.toString();
 
         await _firestore
-            .collection('users')
+            .collection("users")
             .doc(user.uid)
-            .collection('practice_sessions')
-            .doc(timestamp)
+            .collection("practice_sessions")
+            .doc(id)
             .set(data, SetOptions(merge: true));
 
-        log("✅ Synced practice session → Firebase (id: $timestamp)");
+        log("☁️ Synced practice log → Firebase (id: $id)");
+
+        count++;
       }
 
-      log("✅ All pending practice logs synced successfully");
+      // 🔥 Clear local pending syncs AFTER success
+      await HiveService.clearPendingSyncsOfType("practice_logs");
+
+      log("✅ Synced $count practice logs");
+      return count;
     } catch (e, st) {
-      log("⚠️ Failed to sync practice sessions: $e", stackTrace: st);
+      log("⚠️ syncPendingSessions error: $e", stackTrace: st);
+      return 0;
     }
   }
 
   /// ----------------------------------------------------------
-  /// 🔄 SyncData (used by SyncManager)
+  /// 🔄 Sync All Practice Data (used by SyncManager)
   /// ----------------------------------------------------------
   Future<void> syncData() async {
     try {
       await syncPendingSessions();
-      log("✅ PracticeRepository sync complete.");
+      log("✅ PracticeRepository sync completed");
     } catch (e, st) {
       log("⚠️ PracticeRepository sync failed: $e", stackTrace: st);
     }
   }
 
   /// ----------------------------------------------------------
-  /// 🗓️ Get Activity Map from Hive (used in heatmap)
+  /// 🗓️ Heatmap Activity
   /// ----------------------------------------------------------
   Map<DateTime, int> getActivityMapFromHive() {
     try {
       return HiveService.getActivityMap();
     } catch (e, st) {
-      log("⚠️ Failed to load activity map from Hive: $e", stackTrace: st);
+      log("⚠️ Failed to load activity map: $e", stackTrace: st);
       return {};
     }
   }
 
   /// ----------------------------------------------------------
-  /// 🧹 Clear all local data (for reset / logout)
+  /// 🧹 Clear Local Practice Data
   /// ----------------------------------------------------------
   Future<void> clearAllLocalData() async {
     try {
       await HiveService.clearPracticeLogs();
-      log("🧹 Cleared all local practice logs successfully");
+      log("🧹 All local practice logs cleared");
     } catch (e, st) {
-      log("⚠️ Failed to clear practice logs: $e", stackTrace: st);
+      log("⚠️ clearAllLocalData error: $e", stackTrace: st);
     }
   }
 }

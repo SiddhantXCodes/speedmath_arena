@@ -1,6 +1,4 @@
-// FILE: lib/features/learn_daily/learning_items.dart
-
-// small helpers and imports
+//lib/features/learn_daily/learning_items.dart
 import 'dart:math' as Math;
 
 class LearningItems {

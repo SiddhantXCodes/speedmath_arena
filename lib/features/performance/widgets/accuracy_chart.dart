@@ -1,7 +1,8 @@
+//lib/features/performance/widgets/accuracy_chart.dart
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../theme/app_theme.dart';
-import '../../practice/practice_log_provider.dart';
+import '../../../providers/practice_log_provider.dart';
 
 class AccuracyChart extends StatelessWidget {
   final PracticeLogProvider log;

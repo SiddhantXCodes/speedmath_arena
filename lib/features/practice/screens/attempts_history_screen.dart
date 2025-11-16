@@ -1,8 +1,9 @@
+//lib/features/practice/screens/attempts_history_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../../performance/performance_provider.dart';
-import '../practice_log_provider.dart';
+import '../../../providers/performance_provider.dart';
+import '../../../providers/practice_log_provider.dart';
 import '../../../theme/app_theme.dart';
 
 /// 🧾 Combined Attempts History Screen

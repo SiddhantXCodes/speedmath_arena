@@ -1,3 +1,4 @@
+//lib/features/home/widgets/section_header.dart
 import 'package:flutter/material.dart';
 
 class SectionHeader extends StatelessWidget {

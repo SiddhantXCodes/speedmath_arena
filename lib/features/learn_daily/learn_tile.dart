@@ -1,4 +1,4 @@
-// FILE: lib/features/learn_daily/learn_tile.dart
+//lib/features/learn_daily/learn_tile.dart
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import 'learn_repository.dart';

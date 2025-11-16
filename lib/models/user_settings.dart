@@ -1,3 +1,4 @@
+//lib/models/user_settings.dart
 import 'package:hive/hive.dart';
 part 'user_settings.g.dart';
 

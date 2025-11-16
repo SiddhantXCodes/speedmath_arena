@@ -1,3 +1,4 @@
+//lib/features/home/widgets/daily_trick_card.dart
 import 'package:flutter/material.dart';
 
 class DailyTrickCard extends StatelessWidget {

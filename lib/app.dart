@@ -1,65 +1,158 @@
 // lib/app.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import 'providers/theme_provider.dart';
-import 'features/performance/performance_provider.dart';
-import 'features/practice/practice_log_provider.dart';
 import 'theme/app_theme.dart';
-import 'features/home/screens/home_screen.dart'; // ✅ moved home to features
-import 'services/sync_manager.dart'; // ✅ for future global sync
-import 'services/firebase_options.dart'; // optional future use
-import 'features/auth/auth_provider.dart';
+import 'features/home/screens/home_screen.dart';
 
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
 
-/// 🧩 Root Application Widget
 class SpeedMathApp extends StatelessWidget {
   const SpeedMathApp({super.key});
 
+  /// 🔥 Exit Confirmation Dialog
+  Future<bool> _confirmExit(BuildContext context) async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) {
+            return Center(
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: 300,
+                  padding: EdgeInsets.all(AppTheme.gap(18)),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(AppTheme.radius(16)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.25),
+                        blurRadius: 14,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.hourglass_bottom_rounded,
+                        size: AppTheme.icon(42),
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+
+                      SizedBox(height: AppTheme.gap(14)),
+
+                      Text(
+                        "Leaving already?",
+                        style: TextStyle(
+                          fontSize: AppTheme.text(19),
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+
+                      SizedBox(height: AppTheme.gap(10)),
+
+                      Text(
+                        "Just 5 more minutes can sharpen your\nmind, boost accuracy, and grow your\nmath momentum!",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: AppTheme.text(14),
+                          height: 1.45,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.85),
+                        ),
+                      ),
+
+                      SizedBox(height: AppTheme.gap(20)),
+
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () => Navigator.of(context).pop(false),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.primary,
+                                padding: EdgeInsets.symmetric(
+                                  vertical: AppTheme.gap(10),
+                                ),
+                              ),
+                              child: Text(
+                                "Stay",
+                                style: TextStyle(
+                                  fontSize: AppTheme.text(15),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.of(context).pop(true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.primary,
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(
+                                  vertical: AppTheme.gap(10),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppTheme.radius(12),
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                "Exit",
+                                style: TextStyle(
+                                  fontSize: AppTheme.text(15),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ) ??
+        false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        // 🌗 Global Theme
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+    // 🔥 Providers are already created in main.dart - just consume them here
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, _) {
+        return MaterialApp(
+          title: 'SpeedMath Pro',
+          debugShowCheckedModeBanner: false,
+          navigatorObservers: [routeObserver],
 
-        // 📊 App-wide Data Providers
-        ChangeNotifierProvider(
-          create: (_) => PerformanceProvider()..loadFromLocal(),
-        ),
-        ChangeNotifierProvider(create: (_) => PracticeLogProvider()),
+          themeMode: themeProvider.themeMode,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
 
-        // 🧠 Future: Global app state (sync, network, etc.)
-        // ChangeNotifierProvider(create: (_) => AppProvider(syncManager: SyncManager())),
-      ],
-      child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, _) {
-          final isDark = themeProvider.isDark;
-
-          return AnimatedTheme(
-            data: isDark ? AppTheme.darkTheme : AppTheme.lightTheme,
-            duration: const Duration(milliseconds: 450),
-            curve: Curves.easeInOutCubic,
-            child: MaterialApp(
-              title: 'SpeedMath Pro',
-              debugShowCheckedModeBanner: false,
-
-              themeMode: themeProvider.themeMode,
-              theme: AppTheme.lightTheme,
-              darkTheme: AppTheme.darkTheme,
-              navigatorObservers: [routeObserver],
-
-              // 🏠 Home Screen
-              home: Builder(
-                key: ValueKey(isDark), // forces rebuild on theme toggle
-                builder: (_) => const HomeScreen(),
-              ),
-            ),
-          );
-        },
-      ),
+          home: WillPopScope(
+            onWillPop: () => _confirmExit(context),
+            child: HomeScreen(key: ValueKey(themeProvider.isDark)),
+          ),
+        );
+      },
     );
   }
 }

@@ -1,11 +1,11 @@
+//lib/services/hive_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
-import 'dart:developer';
 
-// ✅ Centralized Hive box access
+// HiveBoxes import
 import 'hive_boxes.dart';
 
-// 🧩 Models (organized by feature)
+// Models
 import '../models/practice_log.dart';
 import '../models/question_history.dart';
 import '../models/streak_data.dart';
@@ -14,13 +14,7 @@ import '../models/daily_score.dart';
 import '../models/user_profile.dart';
 import '../models/user_settings.dart';
 
-/// 💾 Unified HiveService for safe offline data management.
-/// Handles logs, user data, streaks, and sync queues.
 class HiveService {
-  // ---------------------------------------------------------------------------
-  // ⚙️ Helpers
-  // ---------------------------------------------------------------------------
-
   static String _dateKey(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
@@ -32,14 +26,13 @@ class HiveService {
   }
 
   // ---------------------------------------------------------------------------
-  // 🧩 PRACTICE LOGS
+  // PRACTICE LOGS
   // ---------------------------------------------------------------------------
 
   static Future<void> addPracticeLog(PracticeLog log) async {
     final box = HiveBoxes.practiceLogBox;
     await box.add(log);
     await _incrementActivityForDate(log.date, 1);
-    await queueForSync('practice_logs', log.toMap());
   }
 
   static List<PracticeLog> getPracticeLogs() {
@@ -55,7 +48,7 @@ class HiveService {
   }
 
   // ---------------------------------------------------------------------------
-  // 🧠 QUESTION HISTORY
+  // QUESTION HISTORY
   // ---------------------------------------------------------------------------
 
   static Future<void> addQuestion(QuestionHistory q) async {
@@ -69,7 +62,7 @@ class HiveService {
   }
 
   // ---------------------------------------------------------------------------
-  // 🔥 STREAK / SETTINGS / USER
+  // STREAK / USER / SETTINGS
   // ---------------------------------------------------------------------------
 
   static Future<void> saveStreak(StreakData data) async {
@@ -103,7 +96,7 @@ class HiveService {
   }
 
   // ---------------------------------------------------------------------------
-  // 🗓️ DAILY QUIZ META + SCORES
+  // DAILY QUIZ META + SCORES
   // ---------------------------------------------------------------------------
 
   static Future<void> saveDailyQuizMeta(DailyQuizMeta meta) async {
@@ -116,92 +109,84 @@ class HiveService {
     return Hive.box<DailyQuizMeta>('daily_quiz_meta').get(dateKey);
   }
 
-  /// 💾 Save a DailyScore (offline)
   static Future<void> addDailyScore(DailyScore score) async {
     final box = await _safeBox<DailyScore>('daily_scores');
-    final dateKey = _dateKey(score.date);
-    await box.put(dateKey, score);
+    await box.put(_dateKey(score.date), score);
   }
 
-  /// 📦 Retrieve all DailyScores
   static List<DailyScore> getAllDailyScores() {
     if (!Hive.isBoxOpen('daily_scores')) return [];
     return Hive.box<DailyScore>('daily_scores').values.toList();
   }
 
+  /// 🔥 FIXED — REQUIRED BY PerformanceRepository
   static Future<void> clearDailyScores() async {
-    await (await _safeBox<DailyScore>('daily_scores')).clear();
+    final box = await _safeBox<DailyScore>('daily_scores');
+    await box.clear();
   }
 
   // ---------------------------------------------------------------------------
-  // 📊 ACTIVITY MAP
+  // ACTIVITY MAP
   // ---------------------------------------------------------------------------
 
   static Future<void> _incrementActivityForDate(DateTime d, int by) async {
     final box = await _safeBox<Map>('activity_data');
-    const key = 'activity';
-    final Map? raw = box.get(key);
+    final raw = box.get('activity');
     final data = raw != null ? Map<String, dynamic>.from(raw) : {};
     final k = _dateKey(d);
+
     data[k] = (data[k] ?? 0) + by;
-    await box.put(key, data);
+
+    await box.put('activity', data);
   }
 
   static Map<DateTime, int> getActivityMap() {
     if (!Hive.isBoxOpen('activity_data')) return {};
     final raw = Hive.box<Map>('activity_data').get('activity');
     if (raw == null) return {};
+
     final out = <DateTime, int>{};
+
     Map<String, dynamic>.from(raw).forEach((k, v) {
       try {
-        final parts = k.split('-');
-        out[DateTime(
-          int.parse(parts[0]),
-          int.parse(parts[1]),
-          int.parse(parts[2]),
-        )] = (v as num)
-            .toInt();
+        final p = k.split('-');
+        out[DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]))] =
+            (v as num).toInt();
       } catch (_) {}
     });
+
     return out;
   }
 
-  /// ----------------------------------------------------------
-  /// 📊 Aggregate Offline Practice Stats (Used by QuickStats)
-  /// ----------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // STATS
+  // ---------------------------------------------------------------------------
+
   static Map<String, dynamic> getStats() {
     if (!Hive.isBoxOpen('practice_logs')) return {};
 
-    final logs = Hive.box<PracticeLog>('practice_logs').values.toList();
+    final logs = HiveBoxes.practiceLogBox.values.toList();
     if (logs.isEmpty) return {};
 
-    int totalCorrect = 0;
-    int totalIncorrect = 0;
-    int totalQuestions = 0;
-    double totalAvgTime = 0.0;
+    int correct = 0, wrong = 0;
+    double totalAvg = 0;
 
-    for (final log in logs) {
-      totalCorrect += log.correct;
-      totalIncorrect += log.incorrect;
-      totalQuestions += log.total;
-      totalAvgTime += log.avgTime;
+    for (final l in logs) {
+      correct += l.correct;
+      wrong += l.incorrect;
+      totalAvg += l.avgTime;
     }
-
-    // average time per session (not per question)
-    final avgTime = logs.isNotEmpty
-        ? (totalAvgTime / logs.length).toDouble()
-        : 0.0;
 
     return {
       'sessions': logs.length,
-      'totalCorrect': totalCorrect,
-      'totalIncorrect': totalIncorrect,
-      'avgTime': avgTime,
+      'totalCorrect': correct,
+      'totalIncorrect': wrong,
+      'avgTime': logs.isNotEmpty ? totalAvg / logs.length : 0.0,
     };
   }
 
   // ---------------------------------------------------------------------------
-  // 🔁 SYNC QUEUE
+  // SYNC QUEUE
   // ---------------------------------------------------------------------------
 
   static Future<void> queueForSync(
@@ -210,13 +195,27 @@ class HiveService {
   ) async {
     final box = await _safeBox<Map>('sync_queue');
     final id = DateTime.now().millisecondsSinceEpoch.toString();
-    await box.put(id, {'type': type, 'data': data});
+    await box.put(id, {'id': id, 'type': type, 'data': data});
   }
 
   static List<Map<String, dynamic>> getPendingSyncs() {
     if (!Hive.isBoxOpen('sync_queue')) return [];
-    final box = Hive.box<Map>('sync_queue');
-    return box.values.map((e) => Map<String, dynamic>.from(e)).toList();
+    return Hive.box<Map>(
+      'sync_queue',
+    ).values.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  static Future<void> clearPendingSyncsOfType(String type) async {
+    final box = await _safeBox<Map>('sync_queue');
+
+    final keysToDelete = box.keys.where((k) {
+      final item = box.get(k);
+      return item != null && item['type'] == type;
+    }).toList();
+
+    for (final k in keysToDelete) {
+      await box.delete(k);
+    }
   }
 
   static Future<void> clearSynced(String id) async {
@@ -225,7 +224,7 @@ class HiveService {
   }
 
   // ---------------------------------------------------------------------------
-  // 🧹 CLEAR ALL
+  // CLEAR EVERYTHING
   // ---------------------------------------------------------------------------
 
   static Future<void> clearAllOfflineData() async {

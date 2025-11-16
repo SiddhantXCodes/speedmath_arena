@@ -1,3 +1,4 @@
+//lib/models/practice_log.dart
 import 'package:hive/hive.dart';
 part 'practice_log.g.dart';
 

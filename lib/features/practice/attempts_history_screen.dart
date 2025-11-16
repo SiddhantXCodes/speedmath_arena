@@ -1,12 +1,16 @@
+//lib/features/practice/attempts_history_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../performance/performance_provider.dart';
-import 'practice_log_provider.dart';
+import '../../providers/performance_provider.dart';
+import '../../providers/practice_log_provider.dart';
 import '../../theme/app_theme.dart';
 
-/// 🧾 Combined Attempts History Screen
-/// Shows both offline practice + online ranked attempts (merged chronologically).
+/// 🧾 Combined Attempts History
+/// Merges:
+///  - Offline Practice (Hive)
+///  - Online Ranked Attempts (Firestore)
+/// Sorted newest → oldest
 class AttemptsHistoryScreen extends StatefulWidget {
   const AttemptsHistoryScreen({super.key});
 
@@ -29,15 +33,20 @@ class _AttemptsHistoryScreenState extends State<AttemptsHistoryScreen> {
       final practiceProvider = context.read<PracticeLogProvider>();
       final performanceProvider = context.read<PerformanceProvider>();
 
-      final offline = practiceProvider.getAllSessions(); // from Hive
+      final offline = practiceProvider.getAllSessions(); // Hive
       final online = await performanceProvider
-          .fetchOnlineAttempts(); // from Firestore
+          .fetchOnlineAttempts(); // Firestore
 
       final all = [...offline, ...online];
+
       all.sort((a, b) {
-        final adate = a['date'] ?? a['timestamp'];
-        final bdate = b['date'] ?? b['timestamp'];
-        return (bdate ?? DateTime.now()).compareTo(adate ?? DateTime.now());
+        final ad = a['date'] ?? a['timestamp'];
+        final bd = b['date'] ?? b['timestamp'];
+
+        if (ad is DateTime && bd is DateTime) {
+          return bd.compareTo(ad);
+        }
+        return 0;
       });
 
       setState(() {
@@ -45,42 +54,34 @@ class _AttemptsHistoryScreenState extends State<AttemptsHistoryScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('⚠️ Failed to load attempts: $e');
+      debugPrint('⚠️ Failed loading attempts: $e');
       setState(() => _isLoading = false);
     }
   }
 
+  // MODE BADGES
   Color _badgeColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'daily ranked':
-        return Colors.orangeAccent;
-      case 'mixed practice':
-        return Colors.purpleAccent;
-      default:
-        return Colors.tealAccent;
-    }
+    final t = type.toLowerCase();
+    if (t.contains("ranked")) return Colors.orangeAccent;
+    if (t.contains("mixed")) return Colors.purpleAccent;
+    return Colors.tealAccent;
   }
 
   IconData _modeIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'daily ranked':
-        return Icons.leaderboard_rounded;
-      case 'mixed practice':
-        return Icons.shuffle_rounded;
-      default:
-        return Icons.school_rounded;
-    }
+    final t = type.toLowerCase();
+    if (t.contains("ranked")) return Icons.leaderboard_rounded;
+    if (t.contains("mixed")) return Icons.shuffle_rounded;
+    return Icons.school_rounded;
   }
 
   @override
   Widget build(BuildContext context) {
     final accent = AppTheme.adaptiveAccent(context);
     final textColor = AppTheme.adaptiveText(context);
-    final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final cardColor = AppTheme.adaptiveCard(context);
 
     return Scaffold(
-      backgroundColor: bgColor,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text("Attempts History"),
         centerTitle: true,
@@ -96,10 +97,7 @@ class _AttemptsHistoryScreenState extends State<AttemptsHistoryScreen> {
           ? Center(
               child: Text(
                 "No attempts found yet",
-                style: TextStyle(
-                  color: textColor.withOpacity(0.7),
-                  fontSize: 16,
-                ),
+                style: TextStyle(color: textColor.withOpacity(0.7)),
               ),
             )
           : RefreshIndicator(
@@ -110,21 +108,22 @@ class _AttemptsHistoryScreenState extends State<AttemptsHistoryScreen> {
                 itemCount: _mergedAttempts.length,
                 itemBuilder: (context, index) {
                   final attempt = _mergedAttempts[index];
+
                   final date = attempt['date'] ?? attempt['timestamp'];
-                  final formattedDate = date != null
+                  final formatted = (date is DateTime)
                       ? DateFormat.yMMMd().add_jm().format(date)
-                      : "Unknown";
+                      : "Unknown date";
 
                   final correct = attempt['correct'] ?? 0;
                   final total = attempt['total'] ?? 0;
-                  final type = attempt['category'] ?? 'Practice';
+
+                  final type = attempt['category']?.toString() ?? "Practice";
                   final accuracy = total > 0
                       ? ((correct / total) * 100).toStringAsFixed(1)
                       : "0.0";
 
                   return Card(
                     color: cardColor,
-                    elevation: 2,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -132,7 +131,7 @@ class _AttemptsHistoryScreenState extends State<AttemptsHistoryScreen> {
                     child: ListTile(
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
-                        vertical: 8,
+                        vertical: 10,
                       ),
                       leading: CircleAvatar(
                         backgroundColor: _badgeColor(type).withOpacity(0.25),
@@ -141,17 +140,14 @@ class _AttemptsHistoryScreenState extends State<AttemptsHistoryScreen> {
                       title: Text(
                         attempt['topic'] ?? "Unknown Topic",
                         style: TextStyle(
-                          color: textColor,
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
+                          color: textColor,
                         ),
                       ),
                       subtitle: Text(
-                        "$type  •  $formattedDate",
-                        style: TextStyle(
-                          color: textColor.withOpacity(0.6),
-                          fontSize: 13,
-                        ),
+                        "$type  •  $formatted",
+                        style: TextStyle(color: textColor.withOpacity(0.6)),
                       ),
                       trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -159,9 +155,8 @@ class _AttemptsHistoryScreenState extends State<AttemptsHistoryScreen> {
                           Text(
                             "$accuracy%",
                             style: TextStyle(
-                              fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: correct / total > 0.6
+                              color: (correct / (total == 0 ? 1 : total)) >= 0.6
                                   ? AppTheme.successColor
                                   : AppTheme.warningColor,
                             ),
@@ -169,8 +164,8 @@ class _AttemptsHistoryScreenState extends State<AttemptsHistoryScreen> {
                           Text(
                             "$correct / $total",
                             style: TextStyle(
-                              color: textColor.withOpacity(0.6),
                               fontSize: 12,
+                              color: textColor.withOpacity(0.6),
                             ),
                           ),
                         ],
@@ -193,29 +188,30 @@ class _AttemptsHistoryScreenState extends State<AttemptsHistoryScreen> {
   }
 }
 
-/// 🧩 Review Individual Attempt — shows all questions + answers
+/// REVIEW SCREEN — shows all questions + answers
 class AttemptReviewScreen extends StatelessWidget {
   final Map<String, dynamic> attempt;
+
   const AttemptReviewScreen({super.key, required this.attempt});
 
   @override
   Widget build(BuildContext context) {
     final textColor = AppTheme.adaptiveText(context);
     final cardColor = AppTheme.adaptiveCard(context);
-    final bgColor = Theme.of(context).scaffoldBackgroundColor;
+
     final questions = attempt['questions'] as List? ?? [];
-    final userAnswers = attempt['userAnswers'] ?? {};
+    final answers = attempt['userAnswers'] ?? {};
 
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text("Review Attempt"),
         backgroundColor: AppTheme.adaptiveAccent(context),
       ),
-      backgroundColor: bgColor,
       body: questions.isEmpty
           ? Center(
               child: Text(
-                "No detailed data available for this attempt",
+                "No detailed data for this attempt",
                 style: TextStyle(color: textColor.withOpacity(0.7)),
               ),
             )
@@ -224,52 +220,45 @@ class AttemptReviewScreen extends StatelessWidget {
               itemCount: questions.length,
               itemBuilder: (context, index) {
                 final q = questions[index];
-                final expr = q is Map
-                    ? (q['expression']?.toString() ?? '')
-                    : q.toString();
-                final correct = q is Map
-                    ? (q['correctAnswer']?.toString() ?? '')
-                    : '';
-                final given = userAnswers[index]?.toString() ?? '';
 
-                final bool isCorrect =
-                    correct.isNotEmpty && given.trim() == correct.trim();
+                final expression = q is Map
+                    ? q['expression']?.toString()
+                    : q.toString();
+                final correct = q is Map ? q['correctAnswer']?.toString() : "";
+                final userAns = answers[index]?.toString() ?? "";
+
+                final isCorrect = userAns.trim() == (correct?.trim() ?? "");
 
                 return Card(
                   color: cardColor,
-                  elevation: 1,
+                  margin: const EdgeInsets.symmetric(vertical: 6),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  margin: const EdgeInsets.symmetric(vertical: 6),
                   child: ListTile(
                     title: Text(
-                      expr,
+                      expression ?? "",
                       style: TextStyle(
-                        color: textColor,
-                        fontSize: 16,
                         fontWeight: FontWeight.w600,
+                        color: textColor,
                       ),
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 6),
                         Text(
-                          "Your Answer: $given",
+                          "Your Answer: $userAns",
                           style: TextStyle(
                             color: isCorrect
                                 ? AppTheme.successColor
-                                : AppTheme.warningColor,
+                                : AppTheme.dangerColor,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         Text(
                           "Correct: $correct",
-                          style: TextStyle(
-                            color: AppTheme.successColor.withOpacity(0.8),
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: TextStyle(color: textColor.withOpacity(0.7)),
                         ),
                       ],
                     ),

@@ -1,3 +1,4 @@
+//lib/models/quiz_session_model.dart
 import 'package:hive/hive.dart';
 
 part 'quiz_session_model.g.dart';

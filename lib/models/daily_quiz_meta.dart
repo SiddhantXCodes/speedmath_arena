@@ -1,3 +1,4 @@
+//lib/models/daily_quiz_meta.dart
 import 'package:hive/hive.dart';
 part 'daily_quiz_meta.g.dart';
 

@@ -1,8 +1,9 @@
+//lib/features/performance/screens/performance_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../theme/app_theme.dart';
-import '../performance_provider.dart';
-import '../../practice/practice_log_provider.dart';
+import '../../../providers/performance_provider.dart';
+import '../../../providers/practice_log_provider.dart';
 import '../widgets/leaderboard_header.dart';
 import '../widgets/weekly_summary_card.dart';
 import '../widgets/trend_chart.dart';

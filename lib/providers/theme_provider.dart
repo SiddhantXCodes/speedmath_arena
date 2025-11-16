@@ -1,3 +1,4 @@
+// lib/providers/theme_provider.dart
 import 'package:flutter/material.dart';
 
 /// ✅ Controls global theme (light/dark) across the app

@@ -1,3 +1,4 @@
+//lib/models/question_history.dart
 import 'package:hive/hive.dart';
 part 'question_history.g.dart';
 

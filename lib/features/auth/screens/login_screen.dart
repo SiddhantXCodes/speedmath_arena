@@ -1,3 +1,4 @@
+// lib/features/auth/screens/login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../theme/app_theme.dart';
@@ -15,6 +16,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+
   bool _isLogin = true;
 
   @override
@@ -28,6 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
         title: Text(_isLogin ? "Login" : "Create Account"),
         centerTitle: true,
       ),
+
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -35,13 +38,18 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 16),
             Icon(Icons.lock_outline_rounded, size: 80, color: accent),
             const SizedBox(height: 16),
+
             Text(
-              _isLogin ? "Welcome back!" : "Create your SpeedMath account.",
+              _isLogin ? "Welcome back!" : "Create your SpeedMath Pro account.",
               style: TextStyle(fontSize: 16, color: textColor.withOpacity(0.8)),
               textAlign: TextAlign.center,
             ),
+
             const SizedBox(height: 30),
 
+            // ------------------------------------------------------------
+            // 📝 FORM
+            // ------------------------------------------------------------
             Form(
               key: _formKey,
               child: Column(
@@ -50,12 +58,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextFormField(
                       controller: _nameCtrl,
                       decoration: const InputDecoration(labelText: "Full Name"),
-                      validator: (v) => !_isLogin && (v == null || v.isEmpty)
+                      validator: (v) => (!_isLogin && (v == null || v.isEmpty))
                           ? "Enter your name"
                           : null,
                     ),
                     const SizedBox(height: 16),
                   ],
+
                   TextFormField(
                     controller: _emailCtrl,
                     decoration: const InputDecoration(labelText: "Email"),
@@ -66,6 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
                   const SizedBox(height: 16),
+
                   TextFormField(
                     controller: _passCtrl,
                     obscureText: true,
@@ -74,7 +84,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? "Minimum 6 characters"
                         : null,
                   ),
-                  const SizedBox(height: 10),
+
+                  const SizedBox(height: 12),
 
                   if (auth.error != null)
                     Text(
@@ -82,25 +93,32 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: const TextStyle(color: Colors.red),
                     ),
 
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 15),
 
+                  // ------------------------------------------------------------
+                  // 🔘 LOGIN / REGISTER BUTTON
+                  // ------------------------------------------------------------
                   ElevatedButton(
                     onPressed: auth.loading
                         ? null
                         : () async {
                             if (!_formKey.currentState!.validate()) return;
+
                             if (_isLogin) {
                               await auth.login(
                                 _emailCtrl.text.trim(),
                                 _passCtrl.text.trim(),
+                                context, // 🔥 REQUIRED
                               );
                             } else {
                               await auth.register(
                                 _nameCtrl.text.trim(),
                                 _emailCtrl.text.trim(),
                                 _passCtrl.text.trim(),
+                                context, // 🔥 REQUIRED
                               );
                             }
+
                             if (mounted && auth.error == null) {
                               Navigator.pop(context);
                             }
@@ -116,6 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                   ),
+
                   const SizedBox(height: 14),
 
                   TextButton(
@@ -130,10 +149,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
             ),
+
             const SizedBox(height: 25),
+
+            // ------------------------------------------------------------
+            // 🔵 Google Login
+            // ------------------------------------------------------------
             OutlinedButton.icon(
               onPressed: () async {
-                await auth.loginWithGoogle();
+                await auth.loginWithGoogle(context); // 🔥 UPDATED
                 if (mounted && auth.error == null) Navigator.pop(context);
               },
               icon: Image.asset('assets/images/google_logo.png', height: 24),

@@ -1,3 +1,4 @@
+// lib/features/auth/screens/profile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../theme/app_theme.dart';
@@ -14,6 +15,7 @@ class ProfileScreen extends StatelessWidget {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final auth = Provider.of<AuthProvider>(context);
     final user = auth.user;
+
     final accent = AppTheme.adaptiveAccent(context);
     final textColor = AppTheme.adaptiveText(context);
 
@@ -31,13 +33,15 @@ class ProfileScreen extends StatelessWidget {
           Center(
             child: Column(
               children: [
-                /// 👤 Profile Avatar
+                // -----------------------------
+                // 👤 PROFILE AVATAR
+                // -----------------------------
                 CircleAvatar(
                   radius: 45,
                   backgroundColor: theme.colorScheme.surfaceVariant.withOpacity(
                     0.4,
                   ),
-                  backgroundImage: user?.photoURL != null
+                  backgroundImage: (user?.photoURL != null)
                       ? NetworkImage(user!.photoURL!)
                       : null,
                   child: user == null
@@ -55,9 +59,12 @@ class ProfileScreen extends StatelessWidget {
                         )
                       : null,
                 ),
+
                 const SizedBox(height: 10),
 
-                /// 🧾 Name + Email
+                // -----------------------------
+                // 🧾 NAME + EMAIL
+                // -----------------------------
                 Text(
                   _capitalizeName(user?.displayName ?? "Guest User"),
                   style: TextStyle(
@@ -75,7 +82,9 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                /// 🔐 Login / Logout Buttons
+                // -----------------------------
+                // 🔐 LOGIN BUTTON
+                // -----------------------------
                 if (user == null)
                   ElevatedButton.icon(
                     onPressed: () {
@@ -109,8 +118,11 @@ class ProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 30),
 
-          /// ⚙️ Settings Section
+          // -----------------------------
+          // ⚙️ SETTINGS
+          // -----------------------------
           _sectionTitle("Settings", textColor),
+
           _tile(
             icon: themeProvider.isDark
                 ? Icons.dark_mode_rounded
@@ -119,6 +131,7 @@ class ProfileScreen extends StatelessWidget {
             subtitle: themeProvider.isDark ? "Enabled" : "Disabled",
             onTap: () => themeProvider.toggleTheme(),
           ),
+
           _tile(
             icon: Icons.notifications_active_rounded,
             title: "Notifications",
@@ -128,8 +141,11 @@ class ProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          /// 💬 Feedback & Support
+          // -----------------------------
+          // 💬 FEEDBACK
+          // -----------------------------
           _sectionTitle("Feedback & Support", textColor),
+
           _tile(
             icon: Icons.star_rate_rounded,
             title: "Rate the App",
@@ -140,6 +156,7 @@ class ProfileScreen extends StatelessWidget {
               );
             },
           ),
+
           _tile(
             icon: Icons.feedback_rounded,
             title: "Send Feedback",
@@ -153,14 +170,22 @@ class ProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          /// 🚪 Sign Out Button (if logged in)
+          // -----------------------------
+          // 🚪 LOGOUT BUTTON
+          // -----------------------------
           if (user != null)
             ElevatedButton.icon(
               onPressed: () async {
-                await auth.logout();
+                await auth.logout(context); // 🔥 FIXED — now passes context
+
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Signed out successfully.")),
+                  const SnackBar(
+                    content: Text("Signed out successfully."),
+                    duration: Duration(seconds: 2),
+                  ),
                 );
+
+                Navigator.pop(context);
               },
               icon: const Icon(Icons.logout_rounded),
               label: const Text("Sign Out"),
@@ -178,7 +203,9 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  // ✅ Helpers
+  // --------------------------------------------------------------------------
+  // 📌 Helpers
+  // --------------------------------------------------------------------------
   String _getUserInitial(String? name, String? email) {
     if (name != null && name.isNotEmpty) return name[0].toUpperCase();
     if (email != null && email.isNotEmpty) return email[0].toUpperCase();
@@ -216,6 +243,8 @@ class ProfileScreen extends StatelessWidget {
     String? subtitle,
     required VoidCallback onTap,
   }) {
+    final theme = AppTheme;
+
     return Card(
       elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: 4),

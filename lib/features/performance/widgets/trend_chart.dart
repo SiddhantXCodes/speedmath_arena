@@ -1,7 +1,8 @@
+//lib/features/performance/widgets/trend_chart.dart
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../theme/app_theme.dart';
-import '../performance_provider.dart';
+import '../../../providers/performance_provider.dart';
 
 class TrendChart extends StatelessWidget {
   final PerformanceProvider perf;

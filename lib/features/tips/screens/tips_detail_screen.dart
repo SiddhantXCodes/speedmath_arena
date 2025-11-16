@@ -1,3 +1,4 @@
+//lib/features/tips/screens/tips_detail_screen.dart
 import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../tips_data.dart';

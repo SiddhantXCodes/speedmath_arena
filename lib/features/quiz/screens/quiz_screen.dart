@@ -1,15 +1,21 @@
+//lib/features/quiz/screens/quiz_screen.dart
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+
 import '../usecase/generate_questions.dart';
 import '../../../theme/app_theme.dart';
 
-// 🧱 Repository + Model Imports
+// 🧱 Repository + Models
 import '../quiz_repository.dart';
 import '../../../models/quiz_session_model.dart';
 
-// sub-widgets
+// 📊 Performance (Ranked Score + Streak)
+import '../../../providers/performance_provider.dart';
+
+// 🧩 Widgets
 import '../widgets/quiz_keyboard.dart';
 import '../widgets/quiz_options.dart';
 import '../widgets/quiz_status_bar.dart';
@@ -29,7 +35,7 @@ class QuizScreen extends StatefulWidget {
   final int count;
   final QuizMode mode;
   final int timeLimitSeconds;
-  final Future<void> Function(Map<String, dynamic> result)? onFinish;
+  final Future<void> Function(Map<String, dynamic>)? onFinish;
 
   const QuizScreen({
     super.key,
@@ -51,10 +57,11 @@ class _QuizScreenState extends State<QuizScreen> {
   static const _kLayoutKey = 'keyboard_layout';
   static const _kInputModeKey = 'input_mode';
 
+  // Quiz State
   List<Question> questions = [];
   final Map<int, String> userAnswers = {};
   List<String> currentOptions = [];
-  bool optionsReady = false;
+
   bool autoSubmit = true;
   KeyboardLayout layout = KeyboardLayout.normal123;
   InputMode inputMode = InputMode.keyboard;
@@ -64,15 +71,17 @@ class _QuizScreenState extends State<QuizScreen> {
   int correctCount = 0;
   int incorrectCount = 0;
 
+  // Timer
   Timer? _ticker;
   final Stopwatch _stopwatch = Stopwatch();
-  String _timerText = '00:00';
+  String _timerText = "00:00";
+
   bool showFeedbackCorrect = false;
   bool showFeedbackIncorrect = false;
 
   SharedPreferences? _prefs;
 
-  // Theme colors
+  // Colors
   late Color primary;
   late Color bgColor;
   late Color cardColor;
@@ -84,16 +93,16 @@ class _QuizScreenState extends State<QuizScreen> {
     super.initState();
     _loadPrefs();
     _generateQuestions();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       setState(() {
         currentOptions = _buildOptionsForCurrent();
-        optionsReady = true;
       });
     });
+
     _startTimer();
   }
 
-  //dispose the things after close
   @override
   void dispose() {
     _ticker?.cancel();
@@ -101,7 +110,7 @@ class _QuizScreenState extends State<QuizScreen> {
     super.dispose();
   }
 
-  //shared preferences
+  // LOAD / SAVE SETTINGS
   Future<void> _loadPrefs() async {
     _prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -117,14 +126,17 @@ class _QuizScreenState extends State<QuizScreen> {
     await _prefs?.setInt(_kInputModeKey, inputMode.index);
   }
 
+  // TIMER
   void _startTimer() {
     _stopwatch.start();
     _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
       if (!mounted) return;
+
       final ms = _stopwatch.elapsedMilliseconds;
       final minutes = (ms ~/ 60000).toString().padLeft(2, '0');
       final seconds = ((ms % 60000) ~/ 1000).toString().padLeft(2, '0');
-      setState(() => _timerText = '$minutes:$seconds');
+
+      setState(() => _timerText = "$minutes:$seconds");
 
       if (widget.timeLimitSeconds > 0 &&
           _stopwatch.elapsed.inSeconds >= widget.timeLimitSeconds) {
@@ -133,6 +145,7 @@ class _QuizScreenState extends State<QuizScreen> {
     });
   }
 
+  // GENERATE QUESTIONS
   void _generateQuestions() {
     questions = QuestionGenerator.generate(
       widget.title,
@@ -147,51 +160,64 @@ class _QuizScreenState extends State<QuizScreen> {
     userAnswers.clear();
   }
 
+  // INPUT
   void _onKeyTap(String value) {
     setState(() {
-      if (value == 'BACK' && typedAnswer.isNotEmpty) {
+      if (value == "BACK" && typedAnswer.isNotEmpty) {
         typedAnswer = typedAnswer.substring(0, typedAnswer.length - 1);
-      } else if (value != 'BACK') {
+      } else if (value != "BACK") {
         typedAnswer += value;
       }
     });
+
     if (inputMode == InputMode.keyboard) _maybeAutoSubmit();
   }
 
   void _maybeAutoSubmit() {
     if (!autoSubmit) return;
+
     final curr = questions[currentIndex];
     final expected = curr.correctAnswer.trim();
+
+    // If exact match → submit
     if (typedAnswer.trim() == expected) return _submitCurrent();
 
+    // If same length → assume final answer
     if (typedAnswer.length >= expected.length &&
         int.tryParse(typedAnswer) != null) {
       return _submitCurrent();
     }
 
-    final typedDouble = double.tryParse(typedAnswer);
-    final expectedDouble = double.tryParse(expected);
-    if (typedDouble != null &&
-        expectedDouble != null &&
-        (typedDouble - expectedDouble).abs() < 1e-6) {
-      _submitCurrent();
+    // Float comparison
+    final d1 = double.tryParse(typedAnswer);
+    final d2 = double.tryParse(expected);
+    if (d1 != null && d2 != null && (d1 - d2).abs() < 1e-6) {
+      return _submitCurrent();
     }
   }
 
   bool _isCorrect(Question q, String given) {
-    final expected = q.correctAnswer.trim();
+    final e = q.correctAnswer.trim();
     final g = given.trim();
-    if (g == expected) return true;
-    final gi = int.tryParse(g), ei = int.tryParse(expected);
+
+    if (g == e) return true;
+
+    final gi = int.tryParse(g);
+    final ei = int.tryParse(e);
     if (gi != null && ei != null && gi == ei) return true;
-    final gd = double.tryParse(g), ed = double.tryParse(expected);
-    return gd != null && ed != null && (gd - ed).abs() < 1e-6;
+
+    final gd = double.tryParse(g);
+    final ed = double.tryParse(e);
+    return (gd != null && ed != null && (gd - ed).abs() < 1e-6);
   }
 
+  // SUBMIT CURRENT QUESTION
   void _submitCurrent() {
     if (typedAnswer.trim().isEmpty) return;
+
     final curr = questions[currentIndex];
     final correct = _isCorrect(curr, typedAnswer);
+
     userAnswers[currentIndex] = typedAnswer;
 
     setState(() {
@@ -216,34 +242,32 @@ class _QuizScreenState extends State<QuizScreen> {
 
   Future<void> _nextQuestion() async {
     if (currentIndex + 1 >= questions.length) {
-      await _finishQuiz();
-      return;
+      return _finishQuiz();
     }
+
     setState(() {
       currentIndex++;
       typedAnswer = '';
       currentOptions = _buildOptionsForCurrent();
-      optionsReady = true;
     });
   }
 
-  // ✅ FINAL UPDATED CORE FUNCTION
+  // ⭐⭐⭐ FINISH QUIZ — Firebase ONLY (perfect version)
   Future<void> _finishQuiz() async {
     if (!mounted) return;
+
     _stopwatch.stop();
     _ticker?.cancel();
 
     final total = questions.length;
     final avgTime = total > 0 ? _stopwatch.elapsed.inSeconds / total : 0.0;
 
-    // Prepare serializable question data
     final questionMaps = questions
         .map(
           (q) => {'expression': q.expression, 'correctAnswer': q.correctAnswer},
         )
         .toList();
 
-    // Main
     final session = QuizSessionModel(
       topic: widget.title,
       category: widget.mode.name,
@@ -255,34 +279,50 @@ class _QuizScreenState extends State<QuizScreen> {
       timeSpentSeconds: _stopwatch.elapsed.inSeconds,
       questions: questionMaps,
       userAnswers: Map<int, String>.from(userAnswers),
+      difficulty: 'normal',
     );
 
     final repo = QuizRepository();
 
-    // Always save offline
-    await repo.saveOfflineSession(session);
-
-    // Online sync for ranked modes
     if (widget.mode == QuizMode.dailyRanked) {
+      // 1) Save results → Firebase
       await repo.saveRankedResult(session);
+
+      // 2) Refresh streak + today's attempt from Firebase ONLY
+      if (mounted) {
+        await context.read<PerformanceProvider>().reloadAll();
+      }
+    } else {
+      // Offline only
+      await repo.saveOfflineResult({
+        'topic': session.topic,
+        'category': session.category,
+        'correct': session.correct,
+        'incorrect': session.incorrect,
+        'score': session.score,
+        'total': session.total,
+        'avgTime': session.avgTime,
+        'timeSpentSeconds': session.timeSpentSeconds,
+        'questions': session.questions,
+        'userAnswers': session.userAnswers,
+      });
     }
 
     // Optional callback
     if (widget.onFinish != null) {
       await widget.onFinish!({
-        'correct': correctCount,
-        'incorrect': incorrectCount,
-        'total': total,
-        'timeText': _timerText,
-        'questions': questions,
-        'userAnswers': Map<int, String>.from(userAnswers),
-        'mode': widget.mode.toString(),
+        "correct": correctCount,
+        "incorrect": incorrectCount,
+        "total": total,
+        "timeText": _timerText,
+        "questions": questions,
+        "userAnswers": Map<int, String>.from(userAnswers),
+        "mode": widget.mode.toString(),
       });
-      return; // 🚨 STOP here — avoid navigating twice
     }
 
-    // 🎯 Navigate to result screen
-    if (context.mounted) {
+    // Go to result screen
+    if (mounted) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -302,49 +342,50 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
+  // BACK HANDLER
   Future<bool> _onWillPop() async {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+
     final shouldExit = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (_) => AlertDialog(
         backgroundColor: theme.scaffoldBackgroundColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
-          'Exit Quiz?',
+          "Exit Quiz?",
           style: TextStyle(
             color: colorScheme.onSurface,
             fontWeight: FontWeight.bold,
           ),
         ),
         content: Text(
-          'Your progress will be lost. Are you sure you want to exit?',
+          "Your progress will be lost. Are you sure?",
           style: TextStyle(color: colorScheme.onSurface.withOpacity(0.8)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: Text(
-              'Cancel',
+              "Cancel",
               style: TextStyle(color: AppTheme.warningColor),
             ),
           ),
           ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.dangerColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
             ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Exit', style: TextStyle(color: Colors.white)),
+            child: const Text("Exit"),
           ),
         ],
       ),
     );
+
     return shouldExit ?? false;
   }
 
+  // SETTINGS
   void _toggleAutoSubmit() {
     setState(() => autoSubmit = !autoSubmit);
     _savePrefs();
@@ -368,52 +409,41 @@ class _QuizScreenState extends State<QuizScreen> {
     _savePrefs();
   }
 
+  // OPTIONS BUILDER
   List<String> _buildOptionsForCurrent() {
-    if (questions.isEmpty) return [];
     final q = questions[currentIndex];
     final correct = q.correctAnswer;
+
     final rnd = Random();
     final Set<String> opts = {correct};
-    int attempts = 0;
 
-    while (opts.length < 4 && attempts < 30) {
-      attempts++;
+    while (opts.length < 4) {
       final cd = double.tryParse(correct);
       if (cd != null) {
         final offset = rnd.nextInt(9) - 4;
-        final candidate = (cd + offset).toStringAsFixed((cd % 1 == 0) ? 0 : 2);
-        opts.add(candidate);
+        opts.add((cd + offset).toString());
       } else {
-        opts.add(correct + (rnd.nextBool() ? '' : ' '));
+        opts.add("${correct}${rnd.nextInt(5)}");
       }
     }
+
     final list = opts.toList()..shuffle();
     return list;
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     primary = AppTheme.adaptiveAccent(context);
-    bgColor = Theme.of(context).scaffoldBackgroundColor;
+    bgColor = theme.scaffoldBackgroundColor;
     cardColor = AppTheme.adaptiveCard(context);
     textColor = AppTheme.adaptiveText(context);
-    onPrimary = Theme.of(context).colorScheme.onPrimary;
-
-    if (questions.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(title: Text(widget.title), backgroundColor: primary),
-        body: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation(primary),
-          ),
-        ),
-      );
-    }
+    onPrimary = theme.colorScheme.onPrimary;
 
     final q = questions[currentIndex];
-    final questionText = '${q.expression.replaceAll('= ?', '')} = ';
-    final colorScheme = Theme.of(context).colorScheme;
+    final questionText = "${q.expression.replaceAll('= ?', '')} = ";
 
     return WillPopScope(
       onWillPop: _onWillPop,
@@ -422,21 +452,17 @@ class _QuizScreenState extends State<QuizScreen> {
           title: Text(
             widget.title,
             style: TextStyle(
-              fontSize: 20,
+              color: onPrimary,
               fontWeight: FontWeight.bold,
-              color: colorScheme.onPrimary,
+              fontSize: 20,
             ),
           ),
           backgroundColor: primary,
           leading: IconButton(
-            icon: Icon(
-              Icons.arrow_back_ios_new,
-              size: 18,
-              color: colorScheme.onPrimary,
-            ),
+            icon: Icon(Icons.arrow_back_ios_new, size: 18, color: onPrimary),
             onPressed: () async {
               final exit = await _onWillPop();
-              if (exit && context.mounted) Navigator.pop(context);
+              if (exit && mounted) Navigator.pop(context);
             },
           ),
           actions: [
@@ -444,11 +470,8 @@ class _QuizScreenState extends State<QuizScreen> {
               onPressed: _toggleAutoSubmit,
               icon: Icon(
                 autoSubmit ? Icons.flash_on : Icons.flash_off,
-                color: autoSubmit
-                    ? AppTheme.warningColor
-                    : colorScheme.onPrimary,
+                color: autoSubmit ? AppTheme.warningColor : onPrimary,
               ),
-              tooltip: "Auto Submit",
             ),
             IconButton(
               onPressed: _cycleLayout,
@@ -456,7 +479,7 @@ class _QuizScreenState extends State<QuizScreen> {
                 layout == KeyboardLayout.normal123
                     ? Icons.format_list_numbered
                     : Icons.format_list_numbered_rtl,
-                color: colorScheme.onPrimary,
+                color: onPrimary,
               ),
             ),
             IconButton(
@@ -465,7 +488,7 @@ class _QuizScreenState extends State<QuizScreen> {
                 inputMode == InputMode.keyboard
                     ? Icons.keyboard
                     : Icons.grid_view_rounded,
-                color: colorScheme.onPrimary,
+                color: onPrimary,
               ),
             ),
           ],
@@ -484,7 +507,9 @@ class _QuizScreenState extends State<QuizScreen> {
                 cardColor: cardColor,
                 isDark: isDark,
               ),
+
               const SizedBox(height: 16),
+
               Expanded(
                 child: Stack(
                   alignment: Alignment.center,
@@ -500,7 +525,7 @@ class _QuizScreenState extends State<QuizScreen> {
                         children: [
                           TextSpan(text: questionText),
                           TextSpan(
-                            text: typedAnswer.isEmpty ? '?' : typedAnswer,
+                            text: typedAnswer.isEmpty ? "?" : typedAnswer,
                             style: TextStyle(
                               color: typedAnswer.isEmpty
                                   ? primary
@@ -510,6 +535,7 @@ class _QuizScreenState extends State<QuizScreen> {
                         ],
                       ),
                     ),
+
                     if (showFeedbackCorrect || showFeedbackIncorrect)
                       Positioned(
                         top: 0,
@@ -518,6 +544,7 @@ class _QuizScreenState extends State<QuizScreen> {
                   ],
                 ),
               ),
+
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: inputMode == InputMode.keyboard
@@ -529,19 +556,13 @@ class _QuizScreenState extends State<QuizScreen> {
                         onSubmit: _submitCurrent,
                         isReversed: layout == KeyboardLayout.reversed789,
                       )
-                    : optionsReady
-                    ? QuizOptions(
+                    : QuizOptions(
                         options: currentOptions,
                         primary: primary,
                         onSelect: (opt) {
                           setState(() => typedAnswer = opt);
                           _submitCurrent();
                         },
-                      )
-                    : Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation(primary),
-                        ),
                       ),
               ),
             ],

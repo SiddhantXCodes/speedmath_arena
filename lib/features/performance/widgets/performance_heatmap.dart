@@ -1,7 +1,8 @@
+//lib/features/performance/widgets/performance_heatmap.dart
 import 'package:flutter/material.dart';
 import '../../home/widgets/heatmap_section.dart';
-import '../../practice/practice_log_provider.dart';
-import '../performance_provider.dart';
+import '../../../providers/practice_log_provider.dart';
+import '../../../providers/performance_provider.dart';
 import '../../../theme/app_theme.dart';
 
 class PerformanceHeatmap extends StatelessWidget {

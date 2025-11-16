@@ -1,3 +1,4 @@
+//lib/models/streak_data.dart
 import 'package:hive/hive.dart';
 part 'streak_data.g.dart';
 

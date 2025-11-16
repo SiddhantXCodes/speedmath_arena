@@ -1,15 +1,21 @@
+// lib/features/home/widgets/quick_stats.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
+
 import '../../../theme/app_theme.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../quiz/screens/daily_ranked_quiz_entry.dart';
 import '../../quiz/screens/leaderboard_screen.dart';
 import '../../performance/screens/performance_screen.dart';
 import '../../../services/hive_service.dart';
+import '../../../providers/performance_provider.dart';
 
-/// ⚡ Unified Quick Stats Section (Hybrid Offline + Online)
-/// Displays user’s offline stats and ranked (online) quiz performance.
+// Prefix to avoid conflict with Firebase Auth
+import '../../auth/auth_provider.dart' as myauth;
+
 class QuickStatsSection extends StatefulWidget {
   final bool isDarkMode;
   const QuickStatsSection({super.key, required this.isDarkMode});
@@ -26,64 +32,123 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
   bool _loading = true;
   bool _attemptedToday = false;
 
-  // --- Offline stats ---
   int offlineSessions = 0;
   int offlineCorrect = 0;
   int offlineIncorrect = 0;
   double offlineAvgTime = 0.0;
 
+  User? _lastUser;
+  bool _isFetching = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _fetchStats();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<myauth.AuthProvider>().addListener(_authChanged);
+      context.read<PerformanceProvider>().addListener(_dataChanged);
+
+      _fetchStats();
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+
+    try {
+      context.read<myauth.AuthProvider>().removeListener(_authChanged);
+      context.read<PerformanceProvider>().removeListener(_dataChanged);
+    } catch (_) {}
+
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _fetchStats();
+    if (state == AppLifecycleState.resumed) {
+      _fetchStats();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant QuickStatsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _fetchStats();
+  }
+
+  void _authChanged() {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user?.uid != _lastUser?.uid) {
+      setState(() {
+        todayRank = null;
+        allTimeRank = null;
+        avgScore = 0;
+        _attemptedToday = false;
+
+        offlineSessions = 0;
+        offlineCorrect = 0;
+        offlineIncorrect = 0;
+        offlineAvgTime = 0;
+
+        _loading = true;
+      });
+
+      _lastUser = user;
+      _fetchStats();
+    }
+  }
+
+  void _dataChanged() {
+    _fetchStats();
   }
 
   String _dateKey(DateTime d) =>
       "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
 
   Future<void> _fetchStats() async {
+    if (!mounted || _isFetching) return;
+
+    _isFetching = true;
+
     try {
+      setState(() => _loading = true);
+
+      // OFFLINE stats
       final localStats = HiveService.getStats() ?? {};
-      offlineSessions = (localStats['sessions'] ?? 0) as int;
-      offlineCorrect = (localStats['totalCorrect'] ?? 0) as int;
-      offlineIncorrect = (localStats['totalIncorrect'] ?? 0) as int;
-      offlineAvgTime = (localStats['avgTime'] ?? 0.0) as double;
+      offlineSessions = localStats['sessions'] ?? 0;
+      offlineCorrect = localStats['totalCorrect'] ?? 0;
+      offlineIncorrect = localStats['totalIncorrect'] ?? 0;
+      offlineAvgTime = (localStats['avgTime'] ?? 0.0).toDouble();
 
       final user = FirebaseAuth.instance.currentUser;
+      _lastUser = user;
+
       if (user == null) {
         setState(() => _loading = false);
+        _isFetching = false;
         return;
       }
 
+      // ONLINE daily leaderboard
       final firestore = FirebaseFirestore.instance;
       final todayKey = _dateKey(DateTime.now());
 
-      // ---- Fetch today's leaderboard rank ----
-      final dailyRef = firestore
+      final dailySnapshot = await firestore
           .collection('daily_leaderboard')
           .doc(todayKey)
-          .collection('entries');
-      final snapshot = await dailyRef
+          .collection('entries')
           .orderBy('score', descending: true)
           .orderBy('timeTaken')
           .get();
 
-      int rank = 1;
-      todayRank = null;
       _attemptedToday = false;
-      for (final doc in snapshot.docs) {
+      todayRank = null;
+
+      int rank = 1;
+      for (final doc in dailySnapshot.docs) {
         if (doc.id == user.uid) {
           todayRank = rank;
           _attemptedToday = true;
@@ -92,12 +157,15 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
         rank++;
       }
 
-      // ---- Fetch all-time rank ----
-      final allRef = firestore.collection('alltime_leaderboard').doc(user.uid);
-      final allSnap = await allRef.get();
+      // ALL TIME
+      final allSnap = await firestore
+          .collection('alltime_leaderboard')
+          .doc(user.uid)
+          .get();
 
       if (allSnap.exists) {
         allTimeRank = await _getGlobalRank(user.uid);
+
         final data = allSnap.data()!;
         final quizzes = (data['quizzesTaken'] ?? 1).toDouble();
         final totalScore = (data['totalScore'] ?? 0).toDouble();
@@ -106,9 +174,11 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
 
       if (mounted) setState(() => _loading = false);
     } catch (e) {
-      debugPrint("⚠️ Error loading stats: $e");
+      debugPrint("⚠️ Error loading quick stats: $e");
       if (mounted) setState(() => _loading = false);
     }
+
+    _isFetching = false;
   }
 
   Future<int?> _getGlobalRank(String uid) async {
@@ -117,6 +187,7 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
           .collection('alltime_leaderboard')
           .orderBy('totalScore', descending: true)
           .get();
+
       int rank = 1;
       for (final doc in snapshot.docs) {
         if (doc.id == uid) return rank;
@@ -131,22 +202,23 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+
     final accent = AppTheme.adaptiveAccent(context);
     final cardColor = AppTheme.adaptiveCard(context);
     final textColor = AppTheme.adaptiveText(context);
 
     if (_loading) {
       return Container(
-        height: 200,
         alignment: Alignment.center,
+        height: 200,
         child: const CircularProgressIndicator(strokeWidth: 2),
       );
     }
 
     final totalAttempts = offlineCorrect + offlineIncorrect;
-    final accuracy = totalAttempts > 0
-        ? (offlineCorrect / totalAttempts) * 100
-        : 0;
+    final accuracy = totalAttempts == 0
+        ? 0
+        : (offlineCorrect / totalAttempts) * 100;
 
     return Container(
       width: double.infinity,
@@ -165,7 +237,7 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 🧭 Header
+          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -194,9 +266,10 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
               ),
             ],
           ),
-          const SizedBox(height: 12),
 
-          // 📊 Offline Stats
+          const SizedBox(height: 14),
+
+          // Offline Stats
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -223,20 +296,16 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
 
           const SizedBox(height: 20),
 
-          // ⚡ Ranked Quiz Section
-          if (user != null)
-            _buildRankedStats(accent)
-          else
-            _buildRankedGuest(accent, textColor, context),
+          user != null
+              ? _buildRankedStats(accent)
+              : _buildRankedGuest(accent, textColor),
         ],
       ),
     );
   }
 
-  // --- Ranked Stats for Logged-in Users ---
   Widget _buildRankedStats(Color accent) {
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: accent.withOpacity(0.1),
@@ -248,10 +317,13 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
             _attemptedToday
                 ? "🎯 You’ve completed today’s ranked quiz!"
                 : "⚡ Take today’s Ranked Quiz and climb the leaderboard!",
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
             textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
           ),
+
           const SizedBox(height: 10),
+
+          // 3 stat boxes
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -275,12 +347,31 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
               ),
             ],
           ),
+
           const SizedBox(height: 14),
+
+          // BUTTON — fully updated logic here
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () {
-                if (_attemptedToday) {
+              onPressed: () async {
+                final perf = context.read<PerformanceProvider>();
+
+                // Always refresh from Firebase
+                await perf.reloadAll();
+                final playedToday = _attemptedToday;
+
+                if (playedToday) {
+                  // already attempted → leaderboard only
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        "🔥 You've already attempted today's ranked quiz!",
+                      ),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -288,12 +379,17 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
                     ),
                   );
                 } else {
-                  Navigator.push(
+                  // same flow as streak
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => const DailyRankedQuizEntry(),
                     ),
                   );
+
+                  // refresh after quiz
+                  await perf.reloadAll();
+                  if (mounted) _fetchStats();
                 }
               },
               icon: Icon(
@@ -305,7 +401,7 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
               label: Text(
                 _attemptedToday
                     ? "View Leaderboard"
-                    : "Take Today’s Ranked Quiz",
+                    : "Take Today's Ranked Quiz",
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               style: ElevatedButton.styleFrom(
@@ -323,14 +419,8 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
     );
   }
 
-  // --- Ranked Section for Guests (only login now) ---
-  Widget _buildRankedGuest(
-    Color accent,
-    Color textColor,
-    BuildContext context,
-  ) {
+  Widget _buildRankedGuest(Color accent, Color textColor) {
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: accent.withOpacity(0.1),
@@ -371,7 +461,6 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
     );
   }
 
-  // --- Mini Stat Widget ---
   Widget _miniStat(IconData icon, String title, String value, Color accent) {
     return Column(
       children: [
@@ -381,13 +470,13 @@ class _QuickStatsSectionState extends State<QuickStatsSection>
           value,
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 14,
             color: accent,
+            fontSize: 14,
           ),
         ),
         Text(
           title,
-          style: TextStyle(color: accent.withOpacity(0.7), fontSize: 12),
+          style: TextStyle(fontSize: 12, color: accent.withOpacity(0.7)),
         ),
       ],
     );

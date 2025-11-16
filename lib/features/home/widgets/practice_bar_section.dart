@@ -1,3 +1,4 @@
+//lib/features/home/widgets/practice_bar_section.dart
 import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../../quiz/screens/practice_quiz_entry.dart';

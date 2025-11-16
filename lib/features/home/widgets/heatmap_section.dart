@@ -1,10 +1,11 @@
+// lib/features/home/widgets/heatmap_section.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../theme/app_theme.dart';
 
 class HeatmapSection extends StatefulWidget {
   final bool isDarkMode;
-  final Map<dynamic, int> activity;
+  final Map<dynamic, int> activity; // 🔥 merged activity (offline + online)
   final Color Function(int) colorForValue;
 
   const HeatmapSection({
@@ -29,10 +30,25 @@ class _HeatmapSectionState extends State<HeatmapSection> {
     currentMonth = DateTime.now().toLocal();
   }
 
+  /// 🔥 CRITICAL → Refresh heatmap automatically when activity map changes
+  @override
+  void didUpdateWidget(covariant HeatmapSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.activity != widget.activity) {
+      setState(() {
+        normalizedActivity = _normalizeActivity(widget.activity);
+      });
+    }
+  }
+
+  /// Normalizes keys into consistent DateTime objects
   Map<DateTime, int> _normalizeActivity(Map<dynamic, int> map) {
     final data = <DateTime, int>{};
+
     map.forEach((key, value) {
       DateTime? date;
+
       if (key is DateTime) {
         date = DateTime(key.year, key.month, key.day);
       } else if (key is String) {
@@ -40,10 +56,12 @@ class _HeatmapSectionState extends State<HeatmapSection> {
           date = DateTime.parse(key);
         } catch (_) {}
       }
+
       if (date != null) {
         data[date] = (data[date] ?? 0) + (value ?? 0);
       }
     });
+
     return data;
   }
 
@@ -55,6 +73,7 @@ class _HeatmapSectionState extends State<HeatmapSection> {
 
     final days = _generateMonthDays(currentMonth);
     final monthLabel = DateFormat('MMMM yyyy').format(currentMonth);
+
     final totalSessions = days.fold<int>(
       0,
       (sum, d) => sum + (normalizedActivity[d] ?? 0),
@@ -73,7 +92,7 @@ class _HeatmapSectionState extends State<HeatmapSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header: Month + Year switcher
+          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -111,9 +130,10 @@ class _HeatmapSectionState extends State<HeatmapSection> {
               ),
             ],
           ),
+
           const SizedBox(height: 10),
 
-          // Weekdays header (Monday-start)
+          // Weekdays
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -133,14 +153,15 @@ class _HeatmapSectionState extends State<HeatmapSection> {
                 )
                 .toList(),
           ),
+
           const SizedBox(height: 6),
 
-          // Calendar grid
+          // Calendar heatmap grid
           _buildCalendarGrid(days, textColor, bgColor, now),
 
           const SizedBox(height: 10),
 
-          // Legend + Summary
+          // Legend + summary
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -171,16 +192,18 @@ class _HeatmapSectionState extends State<HeatmapSection> {
     Color bgColor,
     DateTime now,
   ) {
-    // Flutter weekday() returns 1=Mon … 7=Sun
     final firstWeekday = DateTime(days.first.year, days.first.month, 1).weekday;
-    final startPadding = firstWeekday - 1; // make Monday = start
+    final startPadding = firstWeekday - 1;
     final totalCells = startPadding + days.length;
+
     final rows = <Widget>[];
 
     for (int i = 0; i < totalCells; i += 7) {
       final weekCells = <Widget>[];
+
       for (int j = 0; j < 7; j++) {
         final index = i + j - startPadding;
+
         if (index < 0 || index >= days.length) {
           weekCells.add(const Expanded(child: SizedBox()));
         } else {
@@ -232,6 +255,7 @@ class _HeatmapSectionState extends State<HeatmapSection> {
           );
         }
       }
+
       rows.add(Row(children: weekCells));
     }
 
@@ -240,6 +264,7 @@ class _HeatmapSectionState extends State<HeatmapSection> {
 
   Widget _buildLegend(Color textColor) {
     final steps = [0, 3, 6, 9, 12];
+
     return Row(
       children: [
         ...steps.map(
@@ -291,7 +316,7 @@ class _HeatmapSectionState extends State<HeatmapSection> {
     );
   }
 
-  // ✅ Heatmap gradient (GitHub-style green shades)
+  /// GitHub-style green gradient
   Color _heatmapColor(int value) {
     if (value <= 0) return Colors.transparent;
     if (value <= 2) return const Color(0xFF9BE9A8);
@@ -303,10 +328,10 @@ class _HeatmapSectionState extends State<HeatmapSection> {
   List<DateTime> _generateMonthDays(DateTime month) {
     final first = DateTime(month.year, month.month, 1);
     final last = DateTime(month.year, month.month + 1, 0);
-    final days = <DateTime>[];
-    for (var d = first; !d.isAfter(last); d = d.add(const Duration(days: 1))) {
-      days.add(d);
-    }
-    return days;
+
+    return List.generate(
+      last.day,
+      (i) => DateTime(month.year, month.month, i + 1),
+    );
   }
 }

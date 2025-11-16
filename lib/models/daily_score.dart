@@ -1,3 +1,4 @@
+//lib/models/daily_score.dart
 import 'package:hive/hive.dart';
 
 part 'daily_score.g.dart';

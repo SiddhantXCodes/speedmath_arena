@@ -1,3 +1,4 @@
+//lib/services/hive_boxes.dart
 import 'package:hive_flutter/hive_flutter.dart';
 
 // 🧩 Core Models
@@ -22,15 +23,15 @@ class HiveBoxes {
 
     registerAdapters();
 
-    // ⚡ Open essential boxes synchronously
+    // ⚡ Essential boxes that MUST be available before providers load
     await openEssentialBoxes();
 
-    // 🚀 Open heavy boxes lazily (background)
+    // 🚀 Heavy/background boxes load async
     openBackgroundBoxes();
   }
 
   /// ----------------------------------------------------------
-  /// 🔹 Register all Hive adapters (before opening any box)
+  /// 🔹 Register all Hive adapters
   /// ----------------------------------------------------------
   static void registerAdapters() {
     // Core
@@ -50,32 +51,42 @@ class HiveBoxes {
   }
 
   /// ----------------------------------------------------------
-  /// 📦 Essential boxes (fast, always needed)
+  /// 📦 Essential boxes (must load BEFORE providers)
   /// ----------------------------------------------------------
   static Future<void> openEssentialBoxes() async {
     await Hive.openBox<UserProfile>('user_profile');
     await Hive.openBox<UserSettings>('user_settings');
     await Hive.openBox<StreakData>('streak_data');
+
+    /// 🔥 CRITICAL FIX → needed for PracticeLogProvider + heatmap
+    await Hive.openBox<Map>('activity_data');
+    await Hive.openBox<PracticeLog>('practice_logs');
+    await Hive.openBox<QuestionHistory>('question_history');
+    await Hive.openBox<DailyScore>('daily_scores');
+    await Hive.openBox<DailyQuizMeta>('daily_quiz_meta');
+    await Hive.openBox('leaderboard_cache');
+    await Hive.openBox<Map>('sync_queue');
   }
 
   /// ----------------------------------------------------------
-  /// 🧠 Background or large boxes (can load asynchronously)
+  /// 🧠 Background/heavy boxes (can load later)
   /// ----------------------------------------------------------
   static Future<void> openBackgroundBoxes() async {
-    // Use `Future.microtask` to prevent blocking UI thread
     Future.microtask(() async {
-      await Hive.openBox<PracticeLog>('practice_logs');
-      await Hive.openBox<QuestionHistory>('question_history');
-      await Hive.openBox<DailyScore>('daily_scores');
-      await Hive.openBox<DailyQuizMeta>('daily_quiz_meta');
-      await Hive.openBox('leaderboard_cache');
-      await Hive.openBox<Map>('sync_queue');
-      await Hive.openBox<Map>('activity_data');
+      // await Hive.openBox<PracticeLog>('practice_logs');
+      // await Hive.openBox<QuestionHistory>('question_history');
+      // await Hive.openBox<DailyScore>('daily_scores');
+      // await Hive.openBox<DailyQuizMeta>('daily_quiz_meta');
+      // await Hive.openBox('leaderboard_cache');
+      // await Hive.openBox<Map>('sync_queue');
+
+      // ❌ REMOVED FROM HERE
+      // await Hive.openBox<Map>('activity_data');
     });
   }
 
   /// ----------------------------------------------------------
-  /// 🧩 Easy accessors for frequently used boxes
+  /// 🧩 Accessors
   /// ----------------------------------------------------------
   static Box<UserProfile> get userProfileBox =>
       Hive.box<UserProfile>('user_profile');
@@ -92,4 +103,7 @@ class HiveBoxes {
       Hive.box<DailyQuizMeta>('daily_quiz_meta');
   static Box get leaderboardCacheBox => Hive.box('leaderboard_cache');
   static Box<Map> get syncQueueBox => Hive.box<Map>('sync_queue');
+
+  /// 🔥 Added missing accessor
+  static Box<Map> get activityDataBox => Hive.box<Map>('activity_data');
 }

@@ -1,4 +1,5 @@
-import 'dart:math';
+//lib/features/quiz/usecase/generate_questions.dart
+import 'dart:math' as math;
 
 class Question {
   final String expression;
@@ -8,10 +9,16 @@ class Question {
 }
 
 class QuestionGenerator {
-  static final _rnd = Random();
+  static final _rnd = math.Random();
 
   /// Central entry point: generates question list for any topic
   static List<Question> generate(String topic, int min, int max, int count) {
+    if (min > max) {
+      final t = min;
+      min = max;
+      max = t;
+    }
+
     topic = topic.toLowerCase();
     switch (topic) {
       case 'addition':
@@ -39,7 +46,7 @@ class QuestionGenerator {
       case 'tables':
         return _tables(min, max, count);
       case 'data interpretation':
-        return _dataInterpretation(count);
+        return _dataInterpretation(min, max, count);
       case 'mixed questions':
         return _mixed(min, max, count);
       default:
@@ -47,7 +54,34 @@ class QuestionGenerator {
     }
   }
 
-  // 🔹 Basic arithmetic operations (improved for balanced variety)
+  // ---------- Helpers ----------
+  static int _randInt(int min, int max) => min + _rnd.nextInt(max - min + 1);
+
+  static T _choice<T>(List<T> list) => list[_rnd.nextInt(list.length)];
+
+  static Map<String, int>? _findIntegerDivisionPair(
+    int min,
+    int max, {
+    int tries = 30,
+  }) {
+    for (int t = 0; t < tries; t++) {
+      final b = _randInt(math.max(2, min), max);
+      final qMin = (min / b).ceil();
+      final qMax = (max / b).floor();
+
+      if (qMin <= qMax && qMax >= 0) {
+        final q = _randInt(math.max(0, qMin), qMax);
+        final a = b * q;
+
+        if (a >= min && a <= max && b >= min && b <= max) {
+          return {'a': a, 'b': b, 'q': q};
+        }
+      }
+    }
+    return null;
+  }
+
+  // ---------- Basic arithmetic ----------
   static List<Question> _basic({
     required String op,
     required int min,
@@ -55,61 +89,53 @@ class QuestionGenerator {
     required int count,
   }) {
     return List.generate(count, (_) {
-      int a, b;
-      num result;
+      int a = _randInt(min, max);
+      int b = _randInt(min, max);
 
       switch (op) {
         case '+':
-          // ✅ Normal random numbers (addition is fine)
-          a = _rnd.nextInt(max - min + 1) + min;
-          b = _rnd.nextInt(max - min + 1) + min;
-          result = a + b;
-          break;
+          return Question(expression: '$a + $b = ?', correctAnswer: '${a + b}');
 
         case '-':
-          // ✅ Ensure no negative answers
-          a = _rnd.nextInt(max - min + 1) + min;
-          b = _rnd.nextInt(max - min + 1) + min;
           if (b > a) {
-            final temp = a;
+            final tmp = a;
             a = b;
-            b = temp;
+            b = tmp;
           }
-          result = a - b;
-          break;
+          return Question(expression: '$a - $b = ?', correctAnswer: '${a - b}');
 
         case '×':
-          // ✅ Make multiplicands less "close" — larger spread
-          // Pick one small, one large value for better mix
-          a = _rnd.nextInt((max - min) ~/ 2) + min; // smaller range
-          b = _rnd.nextInt(max - min + 1) + (max ~/ 2); // larger number
-          result = a * b;
-          break;
+          return Question(expression: '$a × $b = ?', correctAnswer: '${a * b}');
 
         case '÷':
-          // ✅ Ensure integer division with whole number result
-          b = _rnd.nextInt((max - min) ~/ 2) + 2; // avoid 0 and 1
-          result = _rnd.nextInt((max - min) ~/ 2) + 2;
-          a = b * result.toInt(); // make a divisible by b
-          break;
+          final pair = _findIntegerDivisionPair(min, max);
+          if (pair != null && pair['b'] != 0) {
+            return Question(
+              expression: '${pair['a']} ÷ ${pair['b']} = ?',
+              correctAnswer: '${pair['q']}',
+            );
+          }
+
+          b = _randInt(math.max(1, min), max);
+          final res = (a / b).toStringAsFixed(2);
+          return Question(expression: '$a ÷ $b = ?', correctAnswer: res);
 
         default:
-          // fallback (shouldn't occur)
-          a = _rnd.nextInt(max - min + 1) + min;
-          b = _rnd.nextInt(max - min + 1) + min;
-          result = 0;
+          return Question(
+            expression: '$a $op $b = ?',
+            correctAnswer: '${a + b}',
+          );
       }
-
-      return Question(expression: '$a $op $b = ?', correctAnswer: '$result');
     });
   }
 
-  // 🔹 Percentage Questions
+  // ---------- Percentage ----------
   static List<Question> _percentage(int min, int max, int count) {
     return List.generate(count, (_) {
-      final base = _rnd.nextInt(max - min + 1) + min;
-      final percent = _rnd.nextInt(90) + 5;
+      final base = _randInt(min, max);
+      final percent = _randInt(5, 95);
       final result = (base * percent / 100).toStringAsFixed(2);
+
       return Question(
         expression: '$percent% of $base = ?',
         correctAnswer: result,
@@ -117,13 +143,14 @@ class QuestionGenerator {
     });
   }
 
-  // 🔹 Average
+  // ---------- Average ----------
   static List<Question> _average(int min, int max, int count) {
     return List.generate(count, (_) {
-      final nums = List.generate(3, (_) => _rnd.nextInt(max - min + 1) + min);
+      final nums = List.generate(3, (_) => _randInt(min, max));
       final avg = (nums.reduce((a, b) => a + b) / nums.length).toStringAsFixed(
         2,
       );
+
       return Question(
         expression: 'Average of ${nums.join(", ")} = ?',
         correctAnswer: avg,
@@ -131,45 +158,92 @@ class QuestionGenerator {
     });
   }
 
-  // 🔹 Square
+  // ---------- Square ----------
   static List<Question> _square(int min, int max, int count) {
+    final nMin = (min <= 0) ? 0 : sqrtCeil(min);
+    final nMax = sqrtFloor(max);
+
+    if (nMin > nMax) {
+      return List.generate(count, (_) {
+        final n = _randInt(min, max);
+        return Question(expression: '$n² = ?', correctAnswer: '${n * n}');
+      });
+    }
+
     return List.generate(count, (_) {
-      final n = _rnd.nextInt(max - min + 1) + min;
+      final n = _randInt(nMin, nMax);
       return Question(expression: '$n² = ?', correctAnswer: '${n * n}');
     });
   }
 
-  // 🔹 Cube
+  // ---------- Cube ----------
   static List<Question> _cube(int min, int max, int count) {
+    final nMin = cubeRootCeil(min);
+    final nMax = cubeRootFloor(max);
+
+    if (nMin > nMax) {
+      return List.generate(count, (_) {
+        final n = _randInt(min, max);
+        return Question(expression: '$n³ = ?', correctAnswer: '${n * n * n}');
+      });
+    }
+
     return List.generate(count, (_) {
-      final n = _rnd.nextInt(max - min + 1) + min;
+      final n = _randInt(nMin, nMax);
       return Question(expression: '$n³ = ?', correctAnswer: '${n * n * n}');
     });
   }
 
-  // 🔹 Square Root
+  // ---------- Square Root ----------
   static List<Question> _squareRoot(int min, int max, int count) {
+    final vals = <int>[];
+    for (int n = sqrtCeil(min); n <= sqrtFloor(max); n++) {
+      vals.add(n * n);
+    }
+
+    if (vals.isEmpty) {
+      return List.generate(count, (_) {
+        final x = _randInt(min, max);
+        final root = math.sqrt(x).toStringAsFixed(2);
+        return Question(expression: '√$x ≈ ?', correctAnswer: root);
+      });
+    }
+
     return List.generate(count, (_) {
-      final n = (_rnd.nextInt((max - min) ~/ 2) + min);
-      final sq = n * n;
-      return Question(expression: '√$sq = ?', correctAnswer: '$n');
+      final x = _choice(vals);
+      final root = math.sqrt(x).toInt();
+      return Question(expression: '√$x = ?', correctAnswer: '$root');
     });
   }
 
-  // 🔹 Cube Root
+  // ---------- Cube Root ----------
   static List<Question> _cubeRoot(int min, int max, int count) {
+    final vals = <int>[];
+    for (int n = cubeRootCeil(min); n <= cubeRootFloor(max); n++) {
+      vals.add(n * n * n);
+    }
+
+    if (vals.isEmpty) {
+      return List.generate(count, (_) {
+        final x = _randInt(min, max);
+        final root = math.pow(x, 1 / 3).toStringAsFixed(2);
+        return Question(expression: '∛$x ≈ ?', correctAnswer: root);
+      });
+    }
+
     return List.generate(count, (_) {
-      final n = _rnd.nextInt((max - min) ~/ 2) + min;
-      final cube = n * n * n;
-      return Question(expression: '∛$cube = ?', correctAnswer: '$n');
+      final x = _choice(vals);
+      final root = cbrt(x).toInt();
+      return Question(expression: '∛$x = ?', correctAnswer: '$root');
     });
   }
 
-  // 🔹 Tables (multiplication tables)
+  // ---------- Tables ----------
   static List<Question> _tables(int min, int max, int count) {
-    final base = _rnd.nextInt(max - min + 1) + min;
-    return List.generate(count, (i) {
-      final b = i + 1;
+    final base = _randInt(min, max);
+
+    return List.generate(count, (_) {
+      final b = _randInt(min, max);
       return Question(
         expression: '$base × $b = ?',
         correctAnswer: '${base * b}',
@@ -177,10 +251,11 @@ class QuestionGenerator {
     });
   }
 
-  // 🔹 Trigonometry (basic degree-based)
+  // ---------- Trigonometry ----------
   static List<Question> _trigonometry(int count) {
-    final trigFuncs = ['sin', 'cos', 'tan'];
-    final commonAngles = [0, 30, 45, 60, 90];
+    final funcs = ['sin', 'cos', 'tan'];
+    final angles = [0, 30, 45, 60, 90];
+
     final values = {
       'sin': ['0', '0.5', '0.707', '0.866', '1'],
       'cos': ['1', '0.866', '0.707', '0.5', '0'],
@@ -188,21 +263,27 @@ class QuestionGenerator {
     };
 
     return List.generate(count, (_) {
-      final f = trigFuncs[_rnd.nextInt(trigFuncs.length)];
-      final idx = _rnd.nextInt(commonAngles.length);
+      final f = _choice(funcs);
+      final idx = _rnd.nextInt(angles.length);
       return Question(
-        expression: '$f(${commonAngles[idx]}°) = ?',
+        expression: '$f(${angles[idx]}°) = ?',
         correctAnswer: values[f]![idx],
       );
     });
   }
 
-  // 🔹 Data Interpretation (simple percent change)
-  static List<Question> _dataInterpretation(int count) {
+  // ---------- Data Interpretation ----------
+  static List<Question> _dataInterpretation(int min, int max, int count) {
     return List.generate(count, (_) {
-      final prev = _rnd.nextInt(900) + 100;
-      final curr = _rnd.nextInt(900) + 100;
+      final prev = _randInt(min, max);
+      var curr = _randInt(min, max);
+
+      if (curr == prev) {
+        curr = (curr == max) ? curr - 1 : curr + 1;
+      }
+
       final change = (((curr - prev) / prev) * 100).toStringAsFixed(1);
+
       return Question(
         expression: 'From $prev to $curr, change (%) = ?',
         correctAnswer: '$change%',
@@ -210,9 +291,9 @@ class QuestionGenerator {
     });
   }
 
-  // 🔹 Mixed Question (random from all)
+  // ---------- Mixed ----------
   static List<Question> _mixed(int min, int max, int count) {
-    const allTopics = [
+    const topics = [
       'addition',
       'subtraction',
       'multiplication',
@@ -221,11 +302,25 @@ class QuestionGenerator {
       'cube',
       'percentage',
       'average',
-      'simplification',
+      'tables',
+      'trigonometry',
+      'data interpretation',
     ];
+
     return List.generate(count, (_) {
-      final t = allTopics[_rnd.nextInt(allTopics.length)];
+      final t = _choice(topics);
       return generate(t, min, max, 1).first;
     });
   }
+
+  // ---------- Math Helpers ----------
+  static int sqrtFloor(int x) => x < 0 ? 0 : math.sqrt(x).floor();
+  static int sqrtCeil(int x) => x <= 0 ? 0 : math.sqrt(x).ceil();
+
+  static int cubeRootFloor(int x) =>
+      x < 0 ? -math.pow(x.abs(), 1 / 3).floor() : math.pow(x, 1 / 3).floor();
+
+  static int cubeRootCeil(int x) => x <= 0 ? 0 : math.pow(x, 1 / 3).ceil();
+
+  static int cbrt(int x) => math.pow(x, 1 / 3).round();
 }
