@@ -2,12 +2,28 @@
 
 import 'package:flutter/material.dart';
 import '../services/hive_service.dart';
-import '../models/daily_score.dart';
 import '../features/performance/performance_repository.dart';
-import 'dart:developer' as dev;
 
 class PerformanceProvider extends ChangeNotifier {
-  final PerformanceRepository _repository = PerformanceRepository();
+  late final PerformanceRepository _repository;
+
+  // --------------------------------------------------------------------------
+  // 🔥 NORMAL CONSTRUCTOR (Production)
+  // --------------------------------------------------------------------------
+  PerformanceProvider() {
+    _repository = PerformanceRepository();
+    _init();
+  }
+
+  // --------------------------------------------------------------------------
+  // 🧪 TEST CONSTRUCTOR (Injected Mock PerformanceRepository)
+  // --------------------------------------------------------------------------
+  PerformanceProvider.test(PerformanceRepository mockRepo) {
+    _repository = mockRepo;
+    // Prevent async Firebase calls in tests
+    initialized = true;
+    notifyListeners();
+  }
 
   // --------------------------------------------------------------------------
   // State
@@ -18,7 +34,7 @@ class PerformanceProvider extends ChangeNotifier {
   bool initialized = false;
   bool _isLoadingLeaderboard = false;
 
-  int _currentStreak = 0; // Firebase-provided only
+  int _currentStreak = 0;
   int? _todayRank;
   int? _allTimeRank;
   int? _bestScore;
@@ -57,12 +73,8 @@ class PerformanceProvider extends ChangeNotifier {
   }
 
   // --------------------------------------------------------------------------
-  // Constructor
+  // Initialization
   // --------------------------------------------------------------------------
-  PerformanceProvider() {
-    _init();
-  }
-
   Future<void> _init() async {
     await reloadAll();
     initialized = true;
@@ -86,17 +98,6 @@ class PerformanceProvider extends ChangeNotifier {
       debugPrint("⚠️ loadFromLocal error: $e");
     }
   }
-
-  // --------------------------------------------------------------------------
-  // REMOVE addTodayScore() → Firebase handles this now
-  // --------------------------------------------------------------------------
-  // (Deleted)
-
-  // --------------------------------------------------------------------------
-  // REMOVE all streak writing logic
-  // streak now comes ONLY from Firebase
-  // --------------------------------------------------------------------------
-  // (Deleted _updateStreak, _loadStreak, hasPlayedToday)
 
   // --------------------------------------------------------------------------
   // Leaderboard (Firebase)
@@ -136,7 +137,7 @@ class PerformanceProvider extends ChangeNotifier {
   }
 
   // --------------------------------------------------------------------------
-  // Reload all
+  // Reload both local + online data
   // --------------------------------------------------------------------------
   Future<void> reloadAll() async {
     try {
@@ -160,21 +161,20 @@ class PerformanceProvider extends ChangeNotifier {
     _allTimeRank = null;
     _bestScore = null;
 
-    // Clear only the graph data, NOT streak
     try {
       await HiveService.clearDailyScores();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint("⚠️ resetAll error: $e");
+    }
 
     notifyListeners();
   }
 
-  // Add at bottom of class
+  // --------------------------------------------------------------------------
+  // Test helper (for manual initialization in tests)
+  // --------------------------------------------------------------------------
   void testMarkInitialized() {
     initialized = true;
+    notifyListeners();
   }
-
-  // --------------------------------------------------------------------------
-  // Utils
-  // --------------------------------------------------------------------------
-  DateTime _normalize(DateTime d) => DateTime(d.year, d.month, d.day);
 }

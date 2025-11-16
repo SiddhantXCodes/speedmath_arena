@@ -1,21 +1,31 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_core_mocks/firebase_core_mocks.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+// test/helpers/firebase_mocks.dart
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:mockito/mockito.dart';
 
 /// -----------------------------------------------------------
-/// 🔥 Mock Classes
+/// 🔥 MOCK CLASSES
 /// -----------------------------------------------------------
+class MockFirebaseAuth extends Mock implements FirebaseAuth {
+  @override
+  Stream<User?> authStateChanges() => Stream.value(null);
 
-class MockFirebaseFirestore extends Mock implements FirebaseFirestore {}
+  @override
+  Stream<User?> userChanges() => Stream.value(null);
 
-class MockFirebaseAuth extends Mock implements FirebaseAuth {}
+  @override
+  User? get currentUser => null;
+}
 
 class MockUser extends Mock implements User {}
 
-class MockGoogleSignIn extends Mock implements GoogleSignIn {}
+class MockUserCredential extends Mock implements UserCredential {}
+
+class MockGoogleSignIn extends Mock implements GoogleSignIn {
+  @override
+  Future<GoogleSignInAccount?> signOut() async => null;
+}
 
 class MockGoogleSignInAccount extends Mock implements GoogleSignInAccount {}
 
@@ -26,21 +36,12 @@ class MockGoogleSignInAuthentication extends Mock
 /// 🔥 GLOBAL MOCK INSTANCES
 /// -----------------------------------------------------------
 late MockFirebaseAuth mockAuth;
-late MockFirebaseFirestore mockFirestore;
 late MockGoogleSignIn mockGoogleSignIn;
 
 /// -----------------------------------------------------------
-/// 🚀 Initialize all mocks before each test
+/// 🚀 Initialize mocks (NO Firebase.initializeApp needed)
 /// -----------------------------------------------------------
 Future<void> setupFirebaseMocks() async {
-  // 1. Setup core firebase mock
-  MockFirebase.initialize();
-
-  // 2. Create mock instances
   mockAuth = MockFirebaseAuth();
-  mockFirestore = MockFirebaseFirestore();
   mockGoogleSignIn = MockGoogleSignIn();
-
-  // 3. Ensure Firebase.initializeApp() works
-  await Firebase.initializeApp();
 }

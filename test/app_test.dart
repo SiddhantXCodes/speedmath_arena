@@ -1,8 +1,9 @@
+// test/app_test.dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 
-import 'helpers/helpers/firebase_mocks.dart';
-import 'helpers/helpers/test_app.dart';
+import 'helpers/firebase_mocks.dart'; // ✅ correct path
+import 'helpers/test_app.dart'; // ✅ correct path
 
 import 'package:speedmaths_pro/features/home/screens/home_screen.dart';
 
@@ -21,10 +22,10 @@ void main() {
       // Load entire app
       await tester.pumpWidget(createTestApp());
 
-      // wait for all providers + async builds
-      await tester.pumpAndSettle(const Duration(seconds: 2));
+      // Give providers time to initialize
+      await tester.pumpAndSettle(const Duration(seconds: 3));
 
-      // HomeScreen must exist
+      // HomeScreen must appear
       expect(find.byType(HomeScreen), findsOneWidget);
     },
   );

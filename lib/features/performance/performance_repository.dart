@@ -1,20 +1,35 @@
-//lib/features/performance/performance_repository.dart
+// lib/features/performance/performance_repository.dart
+
 import 'dart:developer';
 import 'package:hive/hive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../services/hive_service.dart';
 import '../../models/daily_score.dart';
 
 /// 📊 PerformanceRepository — handles all ranked & practice score logic
-/// Combines Firebase (online) and Hive (offline) seamlessly.
-/// Provides leaderboard, performance trends, and background sync.
+/// Production uses real Firebase, but tests inject mocks.
 class PerformanceRepository {
-  final _auth = FirebaseAuth.instance;
-  final _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth;
+  final FirebaseFirestore _firestore;
 
   // --------------------------------------------------------------------------
-  // 🧠 Leaderboard Header (Online + Offline Hybrid)
+  // 🔥 NORMAL CONSTRUCTOR (Production)
+  // --------------------------------------------------------------------------
+  PerformanceRepository()
+    : _auth = FirebaseAuth.instance,
+      _firestore = FirebaseFirestore.instance;
+
+  // --------------------------------------------------------------------------
+  // 🧪 TEST CONSTRUCTOR (Mocks)
+  // --------------------------------------------------------------------------
+  PerformanceRepository.test(FirebaseAuth mockAuth, FirebaseFirestore mockStore)
+    : _auth = mockAuth,
+      _firestore = mockStore;
+
+  // --------------------------------------------------------------------------
+  // 🧠 Leaderboard Header
   // --------------------------------------------------------------------------
   Future<Map<String, dynamic>> fetchLeaderboardHeader() async {
     final user = _auth.currentUser;
@@ -52,27 +67,30 @@ class PerformanceRepository {
         rank++;
       }
 
-      // 🟩 Fetch all-time leaderboard summary
+      // 🟩 All-time leaderboard
       final allSnap = await _firestore
           .collection('alltime_leaderboard')
           .orderBy('totalScore', descending: true)
           .get();
 
       totalUsers = allSnap.size;
+
       rank = 1;
       for (final doc in allSnap.docs) {
         if (doc.id == uid) {
           allTimeRank = rank;
+
           final data = doc.data();
           bestScore =
               (data['bestDailyScore'] ?? data['bestScore'] ?? 0) as int?;
           totalScore = (data['totalScore'] ?? 0) as int?;
+
           break;
         }
         rank++;
       }
 
-      // 🟨 Cache offline
+      // Cache offline
       final cacheBox = await Hive.openBox('leaderboard_cache');
       await cacheBox.put('header', {
         'todayRank': todayRank,
@@ -82,8 +100,6 @@ class PerformanceRepository {
         'totalScore': totalScore,
         'lastFetched': DateTime.now().toIso8601String(),
       });
-
-      log("✅ Leaderboard header fetched + cached");
 
       return {
         'todayRank': todayRank,
@@ -95,11 +111,10 @@ class PerformanceRepository {
     } catch (e, st) {
       log("⚠️ Leaderboard fetch failed: $e", stackTrace: st);
 
-      // 🟧 Load cached fallback
       final cacheBox = await Hive.openBox('leaderboard_cache');
       final cached = cacheBox.get('header');
+
       if (cached != null) {
-        log("📦 Using cached leaderboard data");
         return Map<String, dynamic>.from(cached);
       }
 
@@ -108,27 +123,26 @@ class PerformanceRepository {
   }
 
   // --------------------------------------------------------------------------
-  // 📈 Ranked Quiz Trend (Last 7 Days)
+  // 📈 Ranked Quiz Trend
   // --------------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> fetchRankedQuizTrend() async {
     try {
       final localScores = HiveService.getAllDailyScores();
 
-      if (localScores.isEmpty) {
-        log("⚠️ No local daily scores found");
-        return [];
-      }
+      if (localScores.isEmpty) return [];
 
       localScores.sort((a, b) => b.date.compareTo(a.date));
       final recent = localScores.take(7).toList().reversed.toList();
 
-      return recent.map((score) {
-        return {
-          'date': score.date,
-          'score': score.score,
-          'isRanked': score.isRanked,
-        };
-      }).toList();
+      return recent
+          .map(
+            (score) => {
+              'date': score.date,
+              'score': score.score,
+              'isRanked': score.isRanked,
+            },
+          )
+          .toList();
     } catch (e, st) {
       log("⚠️ Failed to fetch ranked trend: $e", stackTrace: st);
       return [];
@@ -136,12 +150,11 @@ class PerformanceRepository {
   }
 
   // --------------------------------------------------------------------------
-  // 💾 Save DailyScore (Offline)
+  // 💾 Save DailyScore
   // --------------------------------------------------------------------------
   Future<void> saveDailyScore(DailyScore score) async {
     try {
       await HiveService.addDailyScore(score);
-      log("🧩 DailyScore saved locally for ${score.date}");
     } catch (e, st) {
       log("⚠️ Failed to save DailyScore: $e", stackTrace: st);
     }
@@ -152,16 +165,13 @@ class PerformanceRepository {
   // --------------------------------------------------------------------------
   Future<void> syncLocalScoresToFirebase() async {
     final user = _auth.currentUser;
-    if (user == null) {
-      log("⚠️ User not logged in — skipping sync");
-      return;
-    }
+    if (user == null) return;
 
     try {
       final scores = HiveService.getAllDailyScores();
 
       for (final score in scores) {
-        if (!score.isRanked) continue; // only ranked go online
+        if (!score.isRanked) continue;
 
         final dateKey =
             "${score.date.year}-${score.date.month.toString().padLeft(2, '0')}-${score.date.day.toString().padLeft(2, '0')}";
@@ -179,26 +189,14 @@ class PerformanceRepository {
               'timeTakenSeconds': score.timeTakenSeconds,
               'timestamp': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
-
-        log("✅ Synced DailyScore → Firebase: $dateKey (${score.score})");
       }
-
-      log("✅ All ranked scores synced");
     } catch (e, st) {
       log("⚠️ Failed to sync local scores: $e", stackTrace: st);
     }
   }
 
-  // --------------------------------------------------------------------------
-  // 🔄 Called by SyncManager
-  // --------------------------------------------------------------------------
   Future<void> syncData() async {
-    try {
-      await syncLocalScoresToFirebase();
-      log("✅ PerformanceRepository sync complete.");
-    } catch (e, st) {
-      log("⚠️ PerformanceRepository sync failed: $e", stackTrace: st);
-    }
+    await syncLocalScoresToFirebase();
   }
 
   // --------------------------------------------------------------------------
@@ -220,12 +218,12 @@ class PerformanceRepository {
           .get();
 
       return snapshot.docs.map((doc) {
-        final data = doc.data();
+        final d = doc.data();
         return {
-          'date': (data['date'] as Timestamp?)?.toDate(),
-          'score': data['score'] ?? 0,
-          'totalQuestions': data['totalQuestions'] ?? 0,
-          'timeTakenSeconds': data['timeTakenSeconds'] ?? 0,
+          'date': (d['date'] as Timestamp?)?.toDate(),
+          'score': d['score'] ?? 0,
+          'totalQuestions': d['totalQuestions'] ?? 0,
+          'timeTakenSeconds': d['timeTakenSeconds'] ?? 0,
         };
       }).toList();
     } catch (e, st) {
@@ -239,10 +237,9 @@ class PerformanceRepository {
   // --------------------------------------------------------------------------
   Future<void> clearAllLocalData() async {
     try {
-      await HiveService.clearDailyScores(); // 🔥 FIXED — now exists!
-      final cacheBox = await Hive.openBox('leaderboard_cache');
-      await cacheBox.clear();
-      log("🧹 Cleared local performance data");
+      await HiveService.clearDailyScores();
+      final cache = await Hive.openBox('leaderboard_cache');
+      await cache.clear();
     } catch (e, st) {
       log("⚠️ Failed to clear local performance data: $e", stackTrace: st);
     }

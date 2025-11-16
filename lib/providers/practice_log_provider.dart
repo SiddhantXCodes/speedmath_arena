@@ -7,7 +7,7 @@ import '../features/practice/practice_repository.dart';
 /// 🧠 PracticeLogProvider — Bridges UI ↔ Repository
 /// FIXED: Adds `initialized` flag so HomeScreen waits until data loads.
 class PracticeLogProvider extends ChangeNotifier {
-  final PracticeRepository _repository = PracticeRepository();
+  final PracticeRepository _repository;
 
   List<PracticeLog> _logs = [];
   List<PracticeLog> get logs => _logs;
@@ -22,8 +22,18 @@ class PracticeLogProvider extends ChangeNotifier {
   Map<DateTime, int> _activityMap = {};
   Map<DateTime, int> get activityMap => _activityMap;
 
-  PracticeLogProvider() {
+  // --------------------------------------------------------------
+  // 🔥 NORMAL CONSTRUCTOR (Production)
+  // --------------------------------------------------------------
+  PracticeLogProvider() : _repository = PracticeRepository() {
     _init(); // async load
+  }
+
+  // --------------------------------------------------------------
+  // 🧪 TEST CONSTRUCTOR (Accepts mock repository)
+  // --------------------------------------------------------------
+  PracticeLogProvider.test(this._repository) {
+    initialized = true; // Immediately mark as initialized for tests
   }
 
   // --------------------------------------------------------------
@@ -167,9 +177,12 @@ class PracticeLogProvider extends ChangeNotifier {
     }).toList();
   }
 
-  // Add at bottom of class
+  // --------------------------------------------------------------
+  // 🧪 Test helper (manual initialization control)
+  // --------------------------------------------------------------
   void testMarkInitialized() {
     initialized = true;
+    notifyListeners();
   }
 
   // --------------------------------------------------------------

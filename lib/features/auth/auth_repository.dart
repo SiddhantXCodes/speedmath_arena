@@ -24,25 +24,28 @@ class AuthRepository {
     _googleSignIn = mockGoogle ?? GoogleSignIn();
   }
 
+  // Stream of user changes
   Stream<User?> get userChanges => _auth.authStateChanges();
 
+  // Quick access to user
   User? get currentUser => _auth.currentUser;
 
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------
   // EMAIL LOGIN
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------
   Future<User?> signInWithEmail(String email, String password) async {
     final cred = await _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
     );
+
     await cred.user?.reload();
     return _auth.currentUser;
   }
 
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------
   // REGISTER
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------
   Future<User?> registerWithEmail(
     String name,
     String email,
@@ -52,21 +55,22 @@ class AuthRepository {
       email: email,
       password: password,
     );
+
     await cred.user?.updateDisplayName(name);
     await cred.user?.reload();
     return _auth.currentUser;
   }
 
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------
   // RESET PASSWORD
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------
   Future<void> sendPasswordReset(String email) async {
     await _auth.sendPasswordResetEmail(email: email);
   }
 
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------
   // GOOGLE LOGIN
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------
   Future<User?> signInWithGoogle() async {
     final googleUser = await _googleSignIn.signIn();
     if (googleUser == null) return null;
@@ -82,9 +86,9 @@ class AuthRepository {
     return cred.user;
   }
 
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------
   // LOGOUT
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------
   Future<void> signOut() async {
     await _googleSignIn.signOut();
     await _auth.signOut();

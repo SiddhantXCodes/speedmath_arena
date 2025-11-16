@@ -16,21 +16,12 @@ class DailyScoreAdapter extends TypeAdapter<DailyScore> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-
     return DailyScore(
-      date: fields[0] as DateTime? ?? DateTime.now(),
-      score: (fields[1] ?? 0) is int
-          ? fields[1] ?? 0
-          : int.tryParse(fields[1]?.toString() ?? '0') ?? 0,
-      totalQuestions: (fields[2] ?? 0) is int
-          ? fields[2] ?? 0
-          : int.tryParse(fields[2]?.toString() ?? '0') ?? 0,
-      timeTakenSeconds: (fields[3] ?? 0) is int
-          ? fields[3] ?? 0
-          : int.tryParse(fields[3]?.toString() ?? '0') ?? 0,
-      isRanked: fields[4] is bool
-          ? fields[4] as bool
-          : (fields[4]?.toString().toLowerCase() == 'true'),
+      date: fields[0] as DateTime,
+      score: fields[1] as int,
+      totalQuestions: fields[2] as int,
+      timeTakenSeconds: fields[3] as int,
+      isRanked: fields[4] as bool,
     );
   }
 
