@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import '../../../../theme/app_theme.dart';
 import '../quiz_screen.dart';
 
+// NEW IMPORTS:
+import '../../../../models/practice_mode.dart';
+import '../practice_overview_screen.dart';
+
 class MixedQuizSetupScreen extends StatefulWidget {
   const MixedQuizSetupScreen({super.key});
 
@@ -27,15 +31,12 @@ class _MixedQuizSetupScreenState extends State<MixedQuizSetupScreen> {
 
   final Set<String> selectedTopics = {};
 
-  // Range
   final TextEditingController minCtrl = TextEditingController(text: "1");
   final TextEditingController maxCtrl = TextEditingController(text: "50");
 
-  // Timer
   bool useTimer = true;
   int timerMinutes = 2;
 
-  // Default number of questions
   final int defaultCount = 20;
 
   @override
@@ -155,6 +156,35 @@ class _MixedQuizSetupScreenState extends State<MixedQuizSetupScreen> {
 
           const SizedBox(height: 40),
 
+          // ⭐⭐⭐ ADDED: VIEW MIXED PRACTICE HISTORY BUTTON ⭐⭐⭐
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const PracticeOverviewScreen(
+                    mode: PracticeMode.mixedPractice,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.history, size: 20),
+            label: const Text(
+              "View Past Mixed Practice",
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: accent, width: 1.4),
+              foregroundColor: accent,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
           // -------------------- START BUTTON --------------------
           ElevatedButton.icon(
             icon: const Icon(Icons.play_arrow_rounded),
@@ -174,10 +204,7 @@ class _MixedQuizSetupScreenState extends State<MixedQuizSetupScreen> {
                 : () {
                     final min = int.tryParse(minCtrl.text) ?? 1;
                     final max = int.tryParse(maxCtrl.text) ?? 50;
-
-                    final timeSeconds = useTimer
-                        ? (timerMinutes * 60)
-                        : 0; // 0 = unlimited
+                    final timeSeconds = useTimer ? (timerMinutes * 60) : 0;
 
                     Navigator.push(
                       context,
@@ -188,7 +215,7 @@ class _MixedQuizSetupScreenState extends State<MixedQuizSetupScreen> {
                           max: max,
                           count: defaultCount,
                           topics: selectedTopics.toList(),
-                          mode: QuizMode.challenge, // ⭐ Correct mode
+                          mode: QuizMode.challenge, // correct mode
                           timeLimitSeconds: timeSeconds,
                         ),
                       ),
@@ -201,7 +228,6 @@ class _MixedQuizSetupScreenState extends State<MixedQuizSetupScreen> {
   }
 }
 
-// -------------------- DECORATION --------------------
 InputDecoration _inputDecoration(
   BuildContext context,
   String label,

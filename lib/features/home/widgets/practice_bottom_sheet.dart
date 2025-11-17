@@ -196,8 +196,8 @@ Future<void> showPracticeBottomSheet(
               Slider(
                 value: timeLimit,
                 min: 10,
-                max: 300,
-                divisions: 29,
+                max: 2000,
+                divisions: 30,
                 activeColor: accent,
                 onChanged: (value) => setState(() => timeLimit = value),
               ),

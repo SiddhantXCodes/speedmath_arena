@@ -188,7 +188,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text("Leaderboard", style: TextStyle(color: textColor)),
+        title: Text("Leaderboard"),
         backgroundColor: accent,
         centerTitle: true,
         actions: [

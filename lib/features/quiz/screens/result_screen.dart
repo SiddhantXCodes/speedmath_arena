@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../performance/screens/performance_screen.dart';
@@ -82,10 +83,7 @@ class ResultScreen extends StatelessWidget {
         appBar: AppBar(
           backgroundColor: accent,
           leading: IconButton(
-            icon: Icon(
-              Icons.arrow_back_rounded,
-              color: AppTheme.adaptiveText(context),
-            ),
+            icon: const Icon(Icons.arrow_back_rounded),
             onPressed: () {
               Navigator.pushAndRemoveUntil(
                 context,
@@ -94,13 +92,7 @@ class ResultScreen extends StatelessWidget {
               );
             },
           ),
-          title: Text(
-            isRanked ? "Ranked Result" : "Quiz Result",
-            style: TextStyle(
-              color: AppTheme.adaptiveText(context),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          title: Text(isRanked ? "Ranked Result" : "Quiz Result"),
           centerTitle: true,
         ),
 
@@ -128,7 +120,7 @@ class ResultScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      "Your Score",
+                      "Your Today's Score",
                       style: TextStyle(
                         color: textColor.withOpacity(0.7),
                         fontSize: 14,
@@ -145,7 +137,7 @@ class ResultScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      "Time Taken: $mins:$secs",
+                      "Time Taken: ${mins}m ${secs}s",
                       style: TextStyle(
                         color: textColor.withOpacity(0.8),
                         fontSize: 15,
@@ -241,26 +233,50 @@ class ResultScreen extends StatelessWidget {
 
               const SizedBox(height: 22),
 
-              // ----------------------------------------------------
-              // 🕒 HISTORY TITLE
-              // ----------------------------------------------------
+              // ------------------------------------------------------------
+              // 📌 Past Attempts Title
+              // ------------------------------------------------------------
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   "Past Attempts (${history.length})",
                   style: TextStyle(
-                    fontSize: 16,
                     fontWeight: FontWeight.bold,
+                    fontSize: 15,
                     color: textColor,
                   ),
                 ),
               ),
+              const SizedBox(height: 10),
 
-              const SizedBox(height: 12),
+              // ------------------------------------------------------------
+              // 📌 HEADER ROW (same as PracticeOverview)
+              // ------------------------------------------------------------
+              if (history.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: surface.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _header("Date", textColor),
+                      _header("Time", textColor),
+                      _header("Score", textColor),
+                    ],
+                  ),
+                ),
 
-              // ----------------------------------------------------
-              // 📜 HISTORY LIST
-              // ----------------------------------------------------
+              const SizedBox(height: 8),
+
+              // ------------------------------------------------------------
+              // 📌 ATTEMPTS LIST (same UI as PracticeOverview)
+              // ------------------------------------------------------------
               Expanded(
                 child: history.isEmpty
                     ? Center(
@@ -273,17 +289,12 @@ class ResultScreen extends StatelessWidget {
                         itemCount: history.length,
                         itemBuilder: (context, index) {
                           final s = history[index];
+                          final isLast = index == 0;
 
-                          final d = s.date;
-                          final date =
-                              "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
-
-                          final mm = (s.timeTakenSeconds ~/ 60)
-                              .toString()
-                              .padLeft(2, '0');
-                          final ss = (s.timeTakenSeconds % 60)
-                              .toString()
-                              .padLeft(2, '0');
+                          final dateStr = DateFormat(
+                            "MMM d, yy",
+                          ).format(s.date);
+                          final timeStr = DateFormat("h:mm a").format(s.date);
 
                           return Container(
                             margin: const EdgeInsets.symmetric(vertical: 6),
@@ -292,37 +303,48 @@ class ResultScreen extends StatelessWidget {
                               vertical: 12,
                             ),
                             decoration: BoxDecoration(
-                              color: surface,
+                              color: isLast
+                                  ? accent.withOpacity(0.08)
+                                  : surface,
                               borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isLast
+                                    ? accent.withOpacity(0.15)
+                                    : Colors.transparent,
+                              ),
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                /// DATE
-                                Text(
-                                  date,
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontWeight: FontWeight.w600,
+                                SizedBox(
+                                  width: 95,
+                                  child: Text(
+                                    dateStr,
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
-
-                                /// TIME
-                                Text(
-                                  "$mm:$ss",
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: textColor.withOpacity(0.8),
+                                SizedBox(
+                                  width: 85,
+                                  child: Text(
+                                    timeStr,
+                                    style: TextStyle(
+                                      color: textColor.withOpacity(0.7),
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
-
-                                /// SCORE
-                                Text(
-                                  "${s.score}",
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: accent,
+                                Expanded(
+                                  child: Text(
+                                    "${s.score}",
+                                    textAlign: TextAlign.right,
+                                    style: TextStyle(
+                                      color: accent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -334,6 +356,17 @@ class ResultScreen extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _header(String title, Color color) {
+    return Text(
+      title,
+      style: TextStyle(
+        color: color.withOpacity(0.8),
+        fontWeight: FontWeight.w600,
+        fontSize: 13,
       ),
     );
   }

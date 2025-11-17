@@ -113,6 +113,7 @@ class PracticeBarSection extends StatelessWidget {
                     ),
                   ).then((_) => perf.reloadAll());
                 },
+                // keep defaults: showPracticeLink = true, showHistoryButton = false
               );
             },
           ),
@@ -125,14 +126,29 @@ class PracticeBarSection extends StatelessWidget {
             subtitle: "Train like ranked — no limits.",
             icon: Icons.school_rounded,
             color: accent,
+
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const PracticeOverviewScreen(
-                    mode: PracticeMode.dailyPractice,
-                  ),
-                ),
+              // Not played today → start popup
+              showQuizEntryPopup(
+                context: context,
+                title: "Daily Practice Quiz",
+                infoLines: [
+                  "150 seconds timer",
+                  "Score = total correct answers",
+                  "Unlimited No of attempt per day",
+                ],
+                onStart: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PracticeQuizEntry(),
+                    ),
+                  ).then((_) => perf.reloadAll());
+                },
+                // Ranked-specific practice link not needed here:
+                showPracticeLink: false,
+                // NEW: show the "View Past Attempts" button
+                showHistoryButton: true,
               );
             },
           ),
@@ -148,11 +164,7 @@ class PracticeBarSection extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const PracticeOverviewScreen(
-                    mode: PracticeMode.mixedPractice,
-                  ),
-                ),
+                MaterialPageRoute(builder: (_) => const MixedQuizSetupScreen()),
               );
             },
           ),
@@ -164,7 +176,6 @@ class PracticeBarSection extends StatelessWidget {
   }
 }
 
-/// 🎯 Practice Mode Card (Ranked + Offline + Mixed)
 class _PracticeCard extends StatelessWidget {
   final String title;
   final String subtitle;

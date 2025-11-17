@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../screens/practice_quiz_entry.dart';
+import '../screens/practice_overview_screen.dart';
+import '../../../models/practice_mode.dart';
 
 Future<void> showQuizEntryPopup({
   required BuildContext context,
@@ -11,7 +13,8 @@ Future<void> showQuizEntryPopup({
   required VoidCallback onStart,
   int questionCount = 10,
   int timeSeconds = 60,
-  bool showPracticeLink = true, // 👈 Only true for Ranked Quiz
+  bool showPracticeLink = true, // ranked only
+  bool showHistoryButton = false, // daily practice
 }) {
   return showModalBottomSheet(
     context: context,
@@ -31,7 +34,7 @@ Future<void> showQuizEntryPopup({
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Handle Bar
+              // Drag handle
               Center(
                 child: Container(
                   width: 40,
@@ -56,7 +59,7 @@ Future<void> showQuizEntryPopup({
 
               const SizedBox(height: 16),
 
-              // 🔹 Theory Section (Shared)
+              // Info list
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: infoLines.map((line) {
@@ -89,7 +92,7 @@ Future<void> showQuizEntryPopup({
 
               const SizedBox(height: 24),
 
-              // 🔹 Summary Info Box (Shared)
+              // Box: questions + time
               Container(
                 padding: const EdgeInsets.symmetric(
                   vertical: 14,
@@ -138,7 +141,7 @@ Future<void> showQuizEntryPopup({
 
               const SizedBox(height: 24),
 
-              // 🔹 Start Quiz Button
+              // Start Quiz Primary Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -161,37 +164,89 @@ Future<void> showQuizEntryPopup({
                 ),
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
-              // 🔹 Practice Link — ONLY for Ranked Quiz
-              if (showPracticeLink)
-                Column(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const PracticeQuizEntry(),
+              // ------------------------------------------------------------------
+              //  SECONDARY BUTTON 1: VIEW PAST ATTEMPTS (if enabled)
+              // ------------------------------------------------------------------
+              if (showHistoryButton)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const PracticeOverviewScreen(
+                            mode: PracticeMode.dailyPractice,
                           ),
-                        );
-                      },
-                      child: Text(
-                        "Not confident? Practice first",
-                        style: TextStyle(
-                          color: accent,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          decoration: TextDecoration.underline,
                         ),
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: accent,
+                      side: BorderSide(
+                        color: accent.withOpacity(0.18),
+                        width: 1.2,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    const SizedBox(height: 14),
-                  ],
+                    child: const Text(
+                      "View Past Attempts",
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                 ),
 
-              // Cancel Button
+              if (showHistoryButton) const SizedBox(height: 12),
+
+              // ------------------------------------------------------------------
+              //  SECONDARY BUTTON 2: PRACTICE FIRST (same style as above)
+              // ------------------------------------------------------------------
+              if (showPracticeLink)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const PracticeQuizEntry(),
+                        ),
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: accent,
+                      side: BorderSide(
+                        color: accent.withOpacity(0.18),
+                        width: 1.2,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      "Not confident? Practice first",
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+
+              if (showPracticeLink) const SizedBox(height: 14),
+
+              // Cancel button
               Center(
                 child: TextButton(
                   onPressed: () => Navigator.pop(context),
