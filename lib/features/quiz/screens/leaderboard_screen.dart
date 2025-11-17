@@ -42,17 +42,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     return "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
   }
 
-  /// Monday → Sunday week window
-  DateTime get weekStart {
-    final now = DateTime.now();
-    return now.subtract(Duration(days: now.weekday - 1));
-  }
-
-  DateTime get weekEnd {
-    final start = weekStart;
-    return start.add(const Duration(days: 6, hours: 23, minutes: 59));
-  }
-
   // -----------------------------------------------------------
   // FETCH DAILY RANK
   // -----------------------------------------------------------
@@ -91,6 +80,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   // -----------------------------------------------------------
   Future<void> _fetchWeeklyRank() async {
     if (user == null) return;
+
     final list = await _fetchWeeklyLeaderboardList();
 
     int rank = 1;
@@ -110,19 +100,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   // -----------------------------------------------------------
-  // WEEKLY LEADERBOARD FROM DAILY DATA
+  // WEEKLY LEADERBOARD = best score from last 7 days
   // -----------------------------------------------------------
   Future<List<Map<String, dynamic>>> _fetchWeeklyLeaderboardList() async {
     final Map<String, Map<String, dynamic>> bestByUser = {};
 
-    DateTime start = weekStart;
-    DateTime end = weekEnd;
+    final now = DateTime.now();
+    final last7days = List.generate(7, (i) => now.subtract(Duration(days: i)));
 
-    for (
-      DateTime d = start;
-      d.isBefore(end.add(const Duration(days: 1)));
-      d = d.add(const Duration(days: 1))
-    ) {
+    for (final d in last7days) {
       final key =
           "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
 
@@ -153,7 +139,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
     final list = bestByUser.values.toList();
     list.sort((a, b) => b["score"].compareTo(a["score"]));
-
     return list;
   }
 

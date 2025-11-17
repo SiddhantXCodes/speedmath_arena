@@ -8,16 +8,12 @@ import '../../services/hive_service.dart';
 import '../../models/daily_score.dart';
 
 /// 🚀 Clean, unified QuizRepository for new quiz system.
-/// Handles:
-/// - Practice (local)
-/// - Mixed (local)
-/// - Ranked (Firebase ONLY + offline queue)
 class QuizRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // ===========================================================================
-  // 🟦 PRACTICE QUIZ → LOCAL ONLY (practice_scores)
+  // 🟦 PRACTICE QUIZ → LOCAL ONLY
   // ===========================================================================
   Future<void> savePracticeScore(int score, int timeTakenSeconds) async {
     try {
@@ -37,7 +33,7 @@ class QuizRepository {
   }
 
   // ===========================================================================
-  // 🟨 MIXED QUIZ → LOCAL ONLY (mixed_scores)
+  // 🟨 MIXED QUIZ → LOCAL ONLY
   // ===========================================================================
   Future<void> saveMixedScore(int score, int timeTakenSeconds) async {
     try {
@@ -57,62 +53,63 @@ class QuizRepository {
   }
 
   // ===========================================================================
-  // 🟥 RANKED QUIZ → FIREBASE (history + leaderboard) + OFFLINE QUEUE
+  // 🟥 RANKED QUIZ → FIREBASE + OFFLINE QUEUE
   // ===========================================================================
   Future<void> saveRankedScore(int score, int timeTakenSeconds) async {
     final user = _auth.currentUser;
 
-    // Not logged in → store offline queue ONLY (no Hive ranked)
     if (user == null) {
-      dev.log("⚠️ Ranked → User offline → queued for sync later");
+      dev.log("⚠️ User offline → queue ranked attempt");
       await _queueOfflineRanked(score, timeTakenSeconds);
       return;
     }
 
     try {
       await _uploadRankedToFirebase(user, score, timeTakenSeconds);
-
-      dev.log("🔥 Ranked uploaded to Firebase successfully");
+      dev.log("🔥 Ranked uploaded to Firebase");
     } catch (e, st) {
       dev.log(
-        "❌ Ranked upload FAILED → queued offline",
+        "❌ Ranked upload FAILED → queue offline",
         error: e,
         stackTrace: st,
       );
-
       await _queueOfflineRanked(score, timeTakenSeconds);
     }
   }
 
   // ===========================================================================
-  // 🟩 INTERNAL — UPLOAD RANKED ATTEMPT TO FIREBASE
+  // 🟩 INTERNAL — UPLOAD RANKED ATTEMPT (FIXED TIMESTAMP)
   // ===========================================================================
   Future<void> _uploadRankedToFirebase(
     User user,
     int score,
     int timeTakenSeconds,
   ) async {
-    final now = DateTime.now();
-
+    final today = DateTime.now();
     final todayKey =
-        "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+        "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
 
-    // ----------------------------------------------------------
-    // 1️⃣ Save in ranked_attempts/{uid}/attempts/{attemptId}
-    // ----------------------------------------------------------
+    // -----------------------------
+    // 1️⃣ Save full attempt history
+    // -----------------------------
     final attemptRef = _firestore
         .collection("ranked_attempts")
         .doc(user.uid)
         .collection("attempts")
-        .doc(); // auto-ID
+        .doc();
 
-    await attemptRef.set({"score": score, "timestamp": Timestamp.now()});
+    await attemptRef.set({
+      "uid": user.uid,
+      "score": score,
+      "timeTaken": timeTakenSeconds,
+      "timestamp": FieldValue.serverTimestamp(), // FIXED
+    });
 
-    dev.log("📌 Ranked attempt saved → ranked_attempts/${user.uid}/attempts");
+    dev.log("📌 Ranked attempt saved → ranked_attempts");
 
-    // ----------------------------------------------------------
-    // 2️⃣ Update Daily Leaderboard (best of the day)
-    // ----------------------------------------------------------
+    // -----------------------------
+    // 2️⃣ Update Daily Leaderboard
+    // -----------------------------
     final dailyRef = _firestore
         .collection("daily_leaderboard")
         .doc(todayKey)
@@ -124,31 +121,31 @@ class QuizRepository {
       "name": user.displayName ?? "Player",
       "photoUrl": user.photoURL ?? "",
       "score": score,
-      "timestamp": Timestamp.now(),
+      "timeTaken": timeTakenSeconds,
+      "timestamp": FieldValue.serverTimestamp(), // FIXED
     }, SetOptions(merge: true));
 
-    dev.log("🏆 Daily leaderboard updated");
+    dev.log("🏆 Daily leaderboard updated ($todayKey)");
   }
 
   // ===========================================================================
-  // 🟨 OFFLINE QUEUE — STORE ATTEMPT LOCALLY FOR SYNC
+  // 🟨 OFFLINE QUEUE
   // ===========================================================================
   Future<void> _queueOfflineRanked(int score, int timeTakenSeconds) async {
     try {
-      await HiveService.queueForSync('ranked_attempt', {
+      await HiveService.queueForSync("ranked_attempt", {
         "score": score,
         "timeTaken": timeTakenSeconds,
         "timestamp": DateTime.now().toIso8601String(),
       });
-
-      dev.log("📥 Ranked attempt added to offline queue");
+      dev.log("📥 Offline ranked attempt queued");
     } catch (e, st) {
       dev.log("❌ Failed queueing ranked attempt: $e", stackTrace: st);
     }
   }
 
   // ===========================================================================
-  // 🔄 SYNC OFFLINE RANKED WHEN INTERNET RETURNS
+  // 🔄 SYNC OFFLINE RANKED ATTEMPTS
   // ===========================================================================
   Future<void> syncOfflineRankedFromQueue(Map<String, dynamic> data) async {
     final user = _auth.currentUser;
@@ -160,10 +157,9 @@ class QuizRepository {
         data["score"] ?? 0,
         data["timeTaken"] ?? 0,
       );
-
-      dev.log("🔄 Synced offline ranked attempt → Firebase");
+      dev.log("🔄 Offline ranked attempt synced");
     } catch (e, st) {
-      dev.log("❌ Failed syncing offline ranked attempt: $e", stackTrace: st);
+      dev.log("❌ Sync failed: $e", stackTrace: st);
     }
   }
 
@@ -178,11 +174,12 @@ class QuizRepository {
         .doc(todayKey)
         .collection("entries")
         .orderBy("score", descending: true)
+        .orderBy("timeTaken")
         .snapshots();
   }
 
   // ===========================================================================
-  // 🔍 CHECK IF USER HAS ALREADY PLAYED TODAY
+  // 🔍 CHECK IF USER PLAYED TODAY
   // ===========================================================================
   Future<bool> hasPlayedToday() async {
     final user = _auth.currentUser;

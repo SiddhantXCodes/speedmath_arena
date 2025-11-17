@@ -1,34 +1,85 @@
-//lib/features/home/widgets/practice_bar_section.dart
+// lib/features/home/widgets/practice_bar_section.dart
+
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../quiz/screens/practice_overview_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../../theme/app_theme.dart';
-import '../../quiz/screens/practice_quiz_entry.dart';
-import '../../quiz/screens/setup/mixed_quiz_setup_screen.dart';
+import '../../auth/screens/login_screen.dart';
 import '../../quiz/screens/daily_ranked_quiz_entry.dart';
 import '../../quiz/widgets/quiz_entry_popup.dart';
-import '../../quiz/screens/quiz_screen.dart';
-import '../../auth/auth_provider.dart';
-import '../../../providers/performance_provider.dart';
-import 'master_basics_section.dart';
-import '../../auth/screens/login_screen.dart';
-import '../../quiz/screens/result_screen.dart';
+import '../../quiz/screens/leaderboard_screen.dart';
+import '../../quiz/screens/practice_quiz_entry.dart';
+import '../../quiz/screens/setup/mixed_quiz_setup_screen.dart';
 import '../../../models/practice_mode.dart';
+import '../../quiz/screens/practice_overview_screen.dart';
 
-/// 🧮 Unified Practice Zone (below Quick Stats)
-class PracticeBarSection extends StatelessWidget {
+class PracticeBarSection extends StatefulWidget {
   const PracticeBarSection({super.key});
+
+  @override
+  State<PracticeBarSection> createState() => _PracticeBarSectionState();
+}
+
+class _PracticeBarSectionState extends State<PracticeBarSection> {
+  bool loading = true;
+
+  bool attemptedToday = false;
+  int? todayScore;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRankedState();
+  }
+
+  Future<void> _loadRankedState() async {
+    setState(() => loading = true);
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      attemptedToday = false;
+      todayScore = null;
+      setState(() => loading = false);
+      return;
+    }
+
+    final now = DateTime.now();
+    final todayKey =
+        "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
+    final doc = await FirebaseFirestore.instance
+        .collection("daily_leaderboard")
+        .doc(todayKey)
+        .collection("entries")
+        .doc(user.uid)
+        .get();
+
+    if (doc.exists) {
+      attemptedToday = true;
+      todayScore = doc.data()?["score"];
+    } else {
+      attemptedToday = false;
+      todayScore = null;
+    }
+
+    setState(() => loading = false);
+  }
 
   @override
   Widget build(BuildContext context) {
     final accent = AppTheme.adaptiveAccent(context);
-    final textColor = AppTheme.adaptiveText(context);
-    final cardColor = AppTheme.adaptiveCard(context);
 
-    final perf = context.watch<PerformanceProvider>();
-    final user = context.watch<AuthProvider>().user;
+    if (loading) {
+      return SizedBox(
+        height: 160,
+        child: Center(
+          child: CircularProgressIndicator(color: accent, strokeWidth: 2),
+        ),
+      );
+    }
 
-    final attemptedToday = perf.todayRank != null;
+    final user = FirebaseAuth.instance.currentUser;
 
     // Cooldown Timer (Remaining hrs until next quiz)
     String cooldownText = "";
@@ -36,15 +87,14 @@ class PracticeBarSection extends StatelessWidget {
       final now = DateTime.now();
       final tomorrow = DateTime(now.year, now.month, now.day + 1);
       final diff = tomorrow.difference(now);
-      final hoursLeft = diff.inHours;
-      cooldownText = "Next quiz in ${hoursLeft}h";
+      cooldownText = "Next quiz in ${diff.inHours}h";
     }
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: cardColor,
+        color: AppTheme.adaptiveCard(context),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -58,20 +108,20 @@ class PracticeBarSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ⭐ Ranked Quiz Card (same design as other cards)
+          // ⭐ Ranked Quiz Card
           _PracticeCard(
             title: attemptedToday
                 ? "Today's Ranked Result"
                 : "Daily Ranked Quiz",
             subtitle: attemptedToday
-                ? "See your result & leaderboard position"
+                ? "Today's Score: $todayScore"
                 : "1 attempt • 150 seconds timer",
             icon: attemptedToday
                 ? Icons.leaderboard_rounded
                 : Icons.flash_on_rounded,
             color: accent,
             badge: attemptedToday ? cooldownText : null,
-            onTap: () {
+            onTap: () async {
               // Not logged in → login
               if (user == null) {
                 Navigator.push(
@@ -81,22 +131,16 @@ class PracticeBarSection extends StatelessWidget {
                 return;
               }
 
-              // Already played today → go to result
+              // Already played today → go to leaderboard (official result)
               if (attemptedToday) {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => ResultScreen(
-                      score: perf.bestScore ?? 0,
-                      timeTakenSeconds: 0,
-                      mode: QuizMode.dailyRanked,
-                    ),
-                  ),
+                  MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
                 );
                 return;
               }
 
-              // Not played today → start popup
+              // Not played today → show start popup
               showQuizEntryPopup(
                 context: context,
                 title: "Daily Ranked Quiz",
@@ -111,31 +155,28 @@ class PracticeBarSection extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (_) => const DailyRankedQuizEntry(),
                     ),
-                  ).then((_) => perf.reloadAll());
+                  ).then((_) => _loadRankedState());
                 },
-                // keep defaults: showPracticeLink = true, showHistoryButton = false
               );
             },
           ),
 
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
 
-          // 🧩 Offline Practice
+          // 🧩 Daily Practice Quiz (offline)
           _PracticeCard(
             title: "Daily Practice Quiz",
             subtitle: "Train like ranked — no limits.",
             icon: Icons.school_rounded,
             color: accent,
-
             onTap: () {
-              // Not played today → start popup
               showQuizEntryPopup(
                 context: context,
                 title: "Daily Practice Quiz",
                 infoLines: [
                   "150 seconds timer",
                   "Score = total correct answers",
-                  "Unlimited No of attempt per day",
+                  "Unlimited attempts per day",
                 ],
                 onStart: () {
                   Navigator.push(
@@ -143,17 +184,15 @@ class PracticeBarSection extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (_) => const PracticeQuizEntry(),
                     ),
-                  ).then((_) => perf.reloadAll());
+                  );
                 },
-                // Ranked-specific practice link not needed here:
                 showPracticeLink: false,
-                // NEW: show the "View Past Attempts" button
                 showHistoryButton: true,
               );
             },
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
           // 🔀 Mixed Practice
           _PracticeCard(
@@ -169,7 +208,7 @@ class PracticeBarSection extends StatelessWidget {
             },
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -182,8 +221,7 @@ class _PracticeCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
-
-  final String? badge; // 🔥 (optional) cooldown badge
+  final String? badge;
 
   const _PracticeCard({
     required this.title,
@@ -197,7 +235,6 @@ class _PracticeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textColor = AppTheme.adaptiveText(context);
-    final theme = Theme.of(context);
 
     return InkWell(
       onTap: onTap,
@@ -208,12 +245,12 @@ class _PracticeCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         width: double.infinity,
         decoration: BoxDecoration(
-          color: theme.cardColor.withOpacity(0.95),
+          color: Theme.of(context).cardColor.withOpacity(0.95),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: color.withOpacity(0.2), width: 1.2),
           boxShadow: [
             BoxShadow(
-              color: theme.shadowColor.withOpacity(0.04),
+              color: Theme.of(context).shadowColor.withOpacity(0.04),
               blurRadius: 6,
               offset: const Offset(0, 3),
             ),
@@ -222,7 +259,6 @@ class _PracticeCard extends StatelessWidget {
 
         child: Row(
           children: [
-            // Icon bubble
             CircleAvatar(
               radius: 25,
               backgroundColor: color.withOpacity(0.15),
@@ -231,7 +267,6 @@ class _PracticeCard extends StatelessWidget {
 
             const SizedBox(width: 14),
 
-            // Texts
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,7 +284,6 @@ class _PracticeCard extends StatelessWidget {
                         ),
                       ),
 
-                      // 🔥 Cooldown badge (optional)
                       if (badge != null)
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -257,7 +291,7 @@ class _PracticeCard extends StatelessWidget {
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.orangeAccent.withOpacity(0.15),
+                            color: Colors.orangeAccent.withOpacity(0.18),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(

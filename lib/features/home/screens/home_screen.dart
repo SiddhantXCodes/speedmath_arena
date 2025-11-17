@@ -167,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
 
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-          sliver: const SliverToBoxAdapter(child: PracticeBarSection()),
+          sliver: SliverToBoxAdapter(child: PracticeBarSection()),
         ),
 
         _sliverFeatureCard(
@@ -338,7 +338,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                       ),
                       const SizedBox(height: 20),
 
-                      const PracticeBarSection(),
+                      PracticeBarSection(),
                       const SizedBox(height: 20),
 
                       _buildFeatureCard(
