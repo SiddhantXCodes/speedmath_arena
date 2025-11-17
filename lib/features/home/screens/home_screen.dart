@@ -16,7 +16,7 @@ import '../widgets/master_basics_section.dart';
 import '../../../features/auth/auth_provider.dart';
 import '../../performance/screens/performance_screen.dart';
 import '../../practice/screens/attempts_history_screen.dart';
-import '../../learn_daily/learn_daily_screen.dart';
+import '../../revise_daily/screens/learn_daily_screen.dart';
 import '../../tips/screens/tips_home_screen.dart';
 
 class HomeScreen extends StatefulWidget {

@@ -55,8 +55,9 @@ class AppTheme {
     ),
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
-      foregroundColor: Colors.black87,
+      foregroundColor: Colors.white,
       elevation: 0,
+      centerTitle: true,
     ),
     cardColor: lightSurface,
     iconTheme: const IconThemeData(color: lightPrimary),

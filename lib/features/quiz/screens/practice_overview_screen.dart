@@ -62,18 +62,9 @@ class PracticeOverviewScreen extends StatelessWidget {
         appBar: AppBar(
           backgroundColor: accent,
           centerTitle: true,
-          title: Text(
-            isDaily ? "Daily Practice" : "Mixed Practice",
-            style: TextStyle(
-              color: AppTheme.adaptiveText(context),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          title: Text(isDaily ? "Daily Practice" : "Mixed Practice"),
           leading: IconButton(
-            icon: Icon(
-              Icons.arrow_back_rounded,
-              color: AppTheme.adaptiveText(context),
-            ),
+            icon: Icon(Icons.arrow_back_rounded),
             onPressed: () {
               Navigator.pushAndRemoveUntil(
                 context,

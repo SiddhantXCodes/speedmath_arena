@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
-import '../home/widgets/practice_bottom_sheet.dart';
-import 'learn_repository.dart';
-import 'learning_items.dart';
-import 'widgets/learn_table_view.dart';
-import 'widgets/learn_topic_list_view.dart';
+import '../../../theme/app_theme.dart';
+import '../../home/widgets/practice_bottom_sheet.dart';
+import '../learn_repository.dart';
+import '../learning_items.dart';
+import '../widgets/learn_table_view.dart';
+import '../widgets/learn_topic_list_view.dart';
 
 class LearnDetailScreen extends StatefulWidget {
   final String topic;

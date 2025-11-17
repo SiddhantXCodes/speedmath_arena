@@ -1,8 +1,9 @@
 // lib/features/learn_daily/learn_daily_screen.dart
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
-import 'learn_tile.dart';
+import '../../../theme/app_theme.dart';
+import '../learn_tile.dart';
 import 'learn_detail_screen.dart';
+import '../../../theme/app_theme.dart';
 
 class LearnDailyScreen extends StatefulWidget {
   const LearnDailyScreen({super.key});
@@ -39,10 +40,11 @@ class _LearnDailyScreenState extends State<LearnDailyScreen> {
     ];
 
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Learn Daily'),
-        backgroundColor: AppTheme.adaptiveCard(context),
-        iconTheme: IconThemeData(color: AppTheme.adaptiveText(context)),
+        title: const Text('Revise Daily'),
+        centerTitle: true,
+        backgroundColor: AppTheme.adaptiveAccent(context),
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,

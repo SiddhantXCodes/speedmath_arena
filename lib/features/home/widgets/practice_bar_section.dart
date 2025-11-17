@@ -143,7 +143,7 @@ class PracticeBarSection extends StatelessWidget {
             title: "Mixed Practice",
             subtitle: "Customize multiple topics.",
             icon: Icons.shuffle_rounded,
-            color: Colors.tealAccent.shade700,
+            color: accent,
             onTap: () {
               Navigator.push(
                 context,
